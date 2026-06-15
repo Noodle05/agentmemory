@@ -606,7 +606,7 @@ async function main() {
     dedupMap.stop();
     indexPersistence.stop();
     await new Promise<void>((resolve) => viewerServer.close(() => resolve()));
-    await new Promise<void>((resolve) => mcpServer.server.close(() => resolve()));
+    await mcpServer.shutdown();
     await indexPersistence.save().catch((err) => {
       console.warn(`[agentmemory] Failed to save index on shutdown:`, err);
     });

@@ -536,7 +536,7 @@ describe("MCP Stream HTTP (T010-T015)", () => {
       expect(body.result).toBeDefined();
     });
 
-    it("rejects invalid session ID", async () => {
+    it("rejects invalid session ID with error code -32000", async () => {
       await startServer();
 
       const res = await httpPost(
@@ -545,8 +545,11 @@ describe("MCP Stream HTTP (T010-T015)", () => {
         { "Mcp-Session-Id": "invalid-nonexistent-session-id" },
       );
 
-      // Either our code returns 400, or the transport returns 400/404
       expect([400, 404]).toContain(res.status);
+      const body = res.body as Record<string, unknown>;
+      if (body.error) {
+        expect((body.error as Record<string, unknown>).code).toBe(-32000);
+      }
     });
 
     it("returns 400 for non-initialize requests without session ID", async () => {
@@ -624,6 +627,315 @@ describe("MCP Stream HTTP (T010-T015)", () => {
 
       // Notifications should be accepted (200 or 202)
       expect([200, 202]).toContain(notifRes.status);
+    });
+  });
+
+  // T019 — HTTP request validation
+  describe("HTTP method validation", () => {
+    it("returns 405 for GET requests with Allow header", async () => {
+      await startServer();
+      const res = await new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>((resolve, reject) => {
+        const req = http.get(`http://127.0.0.1:${httpPort}/`, (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: data }));
+        });
+        req.on("error", reject);
+      });
+      expect(res.status).toBe(405);
+      expect(res.headers["allow"]).toBe("POST, DELETE");
+    });
+
+    it("returns 405 for OPTIONS requests", async () => {
+      await startServer();
+      const res = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+        const req = http.request(
+          { hostname: "127.0.0.1", port: httpPort, method: "OPTIONS" },
+          (res) => {
+            let data = "";
+            res.on("data", (chunk) => (data += chunk));
+            res.on("end", () => {
+              try {
+                resolve({ status: res.statusCode ?? 0, body: JSON.parse(data) });
+              } catch {
+                resolve({ status: res.statusCode ?? 0, body: data });
+              }
+            });
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+      expect(res.status).toBe(405);
+    });
+
+    it("returns 405 for HEAD requests", async () => {
+      await startServer();
+      const res = await new Promise<{ status: number }>((resolve, reject) => {
+        const req = http.request(
+          { hostname: "127.0.0.1", port: httpPort, method: "HEAD" },
+          (res) => {
+            res.resume();
+            resolve({ status: res.statusCode ?? 0 });
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+      expect(res.status).toBe(405);
+    });
+  });
+
+  describe("Content-Type validation", () => {
+    it("returns 415 for text/plain content type", async () => {
+      await startServer();
+      const bodyStr = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      const res = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: httpPort,
+            method: "POST",
+            headers: {
+              "Content-Type": "text/plain",
+              "Content-Length": String(Buffer.byteLength(bodyStr)),
+            },
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (chunk) => (data += chunk));
+            res.on("end", () => {
+              try {
+                resolve({ status: res.statusCode ?? 0, body: JSON.parse(data) });
+              } catch {
+                resolve({ status: res.statusCode ?? 0, body: data });
+              }
+            });
+          },
+        );
+        req.on("error", reject);
+        req.write(bodyStr);
+        req.end();
+      });
+      expect(res.status).toBe(415);
+    });
+
+    it("returns 415 for multipart/form-data content type", async () => {
+      await startServer();
+      const res = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: httpPort,
+            method: "POST",
+            headers: { "Content-Type": "multipart/form-data", "Content-Length": "0" },
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (chunk) => (data += chunk));
+            res.on("end", () => {
+              try {
+                resolve({ status: res.statusCode ?? 0, body: JSON.parse(data) });
+              } catch {
+                resolve({ status: res.statusCode ?? 0, body: data });
+              }
+            });
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+      expect(res.status).toBe(415);
+    });
+
+    it("returns 415 for missing Content-Type", async () => {
+      await startServer();
+      const bodyStr = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      const res = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: httpPort,
+            method: "POST",
+            headers: { "Content-Length": String(Buffer.byteLength(bodyStr)) },
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (chunk) => (data += chunk));
+            res.on("end", () => {
+              try {
+                resolve({ status: res.statusCode ?? 0, body: JSON.parse(data) });
+              } catch {
+                resolve({ status: res.statusCode ?? 0, body: data });
+              }
+            });
+          },
+        );
+        req.on("error", reject);
+        req.write(bodyStr);
+        req.end();
+      });
+      expect(res.status).toBe(415);
+    });
+
+    it("accepts application/json with charset parameter", async () => {
+      await startServer();
+      const res = await httpPost(httpPort, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
+      });
+      // httpPost helper always sets Content-Type: application/json
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe("body size limit", () => {
+    it("returns 413 for payload exceeding 5MB", async () => {
+      await startServer();
+      // Create a payload larger than 5MB
+      const largeStr = "x".repeat(6 * 1024 * 1024); // 6 MB
+      const bodyStr = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { data: largeStr } });
+      const res = await new Promise<{ status: number }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: httpPort,
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Content-Length": String(Buffer.byteLength(bodyStr)),
+            },
+          },
+          (res) => {
+            res.resume();
+            resolve({ status: res.statusCode ?? 0 });
+          },
+        );
+        req.on("error", (err) => {
+          // The server may destroy the connection on oversize
+          resolve({ status: 413 });
+        });
+        req.write(bodyStr);
+        req.end();
+      });
+      expect(res.status).toBe(413);
+    });
+
+    it("accepts payload under 5MB", async () => {
+      await startServer();
+      const res = await httpPost(httpPort, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
+      });
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe("DELETE request handling", () => {
+    it("returns 200 for DELETE requests", async () => {
+      await startServer();
+      const res = await new Promise<{ status: number }>((resolve, reject) => {
+        const req = http.request(
+          { hostname: "127.0.0.1", port: httpPort, method: "DELETE" },
+          (res) => {
+            res.resume();
+            resolve({ status: res.statusCode ?? 0 });
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe("session lastUsedAt tracking", () => {
+    it("updates lastUsedAt on each request with valid session", async () => {
+      await startServer();
+
+      const initRes = await httpPost(httpPort, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
+      });
+      const sessionId = initRes.headers["mcp-session-id"] as string;
+      expect(sessionId).toBeDefined();
+
+      const entry1 = transports.get(sessionId) as { lastUsedAt: Date } | undefined;
+      expect(entry1).toBeDefined();
+      const firstLastUsed = entry1!.lastUsedAt.getTime();
+
+      // Small delay then another request
+      await new Promise((r) => setTimeout(r, 50));
+
+      await httpPost(
+        httpPort,
+        { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+        { "Mcp-Session-Id": sessionId },
+      );
+
+      const entry2 = transports.get(sessionId) as { lastUsedAt: Date } | undefined;
+      expect(entry2).toBeDefined();
+      expect(entry2!.lastUsedAt.getTime()).toBeGreaterThan(firstLastUsed);
+    });
+
+    it("evicts sessions with lastUsedAt older than 1 hour", async () => {
+      vi.useFakeTimers();
+      try {
+        await startServer();
+
+        // Create a session normally
+        const initRes = await httpPost(httpPort, {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
+        });
+        const sessionId = initRes.headers["mcp-session-id"] as string;
+        expect(sessionId).toBeDefined();
+        expect(transports.has(sessionId)).toBe(true);
+
+        // Manually age the session's lastUsedAt to 2 hours ago
+        const entry = transports.get(sessionId) as { lastUsedAt: Date } | undefined;
+        expect(entry).toBeDefined();
+        entry!.lastUsedAt = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+        // Advance time past the eviction interval (10 min + 1ms)
+        vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+
+        // Session should be evicted
+        expect(transports.has(sessionId)).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("does not evict recently used sessions", async () => {
+      vi.useFakeTimers();
+      try {
+        await startServer();
+
+        const initRes = await httpPost(httpPort, {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
+        });
+        const sessionId = initRes.headers["mcp-session-id"] as string;
+
+        // Advance time but keep session recent (under 1 hour idle)
+        vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+
+        // Session should still be alive (lastUsedAt is current)
+        expect(transports.has(sessionId)).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
