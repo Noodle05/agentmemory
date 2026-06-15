@@ -11,6 +11,9 @@
  * validation, and error formatting while still complying with the MCP
  * Streamable HTTP contract (protocolVersion "2025-03-26").
  *
+ * Observed in @modelcontextprotocol/node v2.0.0-alpha.2 with chunked transfer encoding.
+ * See: https://github.com/modelcontextprotocol/typescript-sdk/issues/187
+ *
  * Revisit this if the upstream SDK fixes the body-parsing issue.
  */
 
@@ -27,7 +30,7 @@ const MAX_BODY_BYTES = 5 * 1024 * 1024; // 5 MB
 
 interface JsonRpcMessage {
   jsonrpc: string;
-  id?: string | number;
+  id?: string | number | null;
   method?: string;
   params?: Record<string, unknown>;
   result?: unknown;
@@ -89,7 +92,7 @@ function errorResponse(
 ): JsonRpcMessage {
   return {
     jsonrpc: "2.0",
-    id: id as string | number | null,
+    id,
     error: { code, message },
   };
 }
@@ -154,6 +157,10 @@ export async function startMcpStreamServer(
       }
 
       if (req.method === "DELETE") {
+        const sessionId = req.headers["mcp-session-id"] as string | undefined;
+        if (sessionId) {
+          sessions.delete(sessionId);
+        }
         res.writeHead(200);
         res.end();
         return;
@@ -164,6 +171,8 @@ export async function startMcpStreamServer(
         bodyStr = await readBody(req);
       } catch (err) {
         if (err instanceof BodyTooLargeError) {
+          // Safety guard: readBody() always rejects before any response is sent,
+          // so headersSent is always false here under normal flow.
           if (!res.headersSent) {
             res.writeHead(413, { "Content-Type": "text/plain" });
             res.end("Payload Too Large");
@@ -187,9 +196,7 @@ export async function startMcpStreamServer(
         return;
       }
 
-      const sessionIdHeader =
-        (req.headers["mcp-session-id"] as string) ||
-        (req.headers["Mcp-Session-Id"] as string);
+      const sessionIdHeader = req.headers["mcp-session-id"] as string | undefined;
 
       const isInitialize = msg.method === "initialize";
       const isNotification =

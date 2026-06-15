@@ -433,14 +433,10 @@ describe("MCP Stream HTTP (T010-T015)", () => {
         req.end();
       });
 
-      // Transport returns parse error via its internal handling
       expect(res.status).toBe(400);
       const body = res.body as Record<string, unknown>;
-      // The transport returns a JSON-RPC parse error which may be -32700 or -32000
-      if (body && body.error) {
-        const code = (body.error as Record<string, unknown>).code;
-        expect([-32700, -32000]).toContain(code);
-      }
+      expect(body.error).toBeDefined();
+      expect((body.error as Record<string, unknown>).code).toBe(-32700);
     });
 
     it("returns method not found (-32601) for unknown methods", async () => {
