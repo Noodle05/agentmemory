@@ -34,6 +34,7 @@ const shared = {
     "onnxruntime-web",
     "@anthropic-ai/claude-agent-sdk",
     "@anthropic-ai/sdk",
+    "@modelcontextprotocol/node",
   ] as const,
 };
 

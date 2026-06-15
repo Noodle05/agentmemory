@@ -160,6 +160,8 @@ export interface AgentMemoryConfig {
   engineUrl: string;
   restPort: number;
   streamsPort: number;
+  /** MCP Streamable HTTP port — defaults to restPort + 3 (3114) */
+  mcpPort: number;
   provider: ProviderConfig;
   tokenBudget: number;
   maxObservationsPerSession: number;

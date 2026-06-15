@@ -169,6 +169,8 @@ export function loadConfig(): AgentMemoryConfig {
   const streamsPort =
     parseInt(env["III_STREAM_PORT"] || env["III_STREAMS_PORT"] || "", 10) ||
     restPort + 1;
+  const mcpPort =
+    parseInt(env["AGENTMEMORY_MCP_PORT"] || "", 10) || restPort + 3;
   const engineUrl =
     env["III_ENGINE_URL"] ||
     `ws://localhost:${
@@ -179,6 +181,7 @@ export function loadConfig(): AgentMemoryConfig {
     engineUrl,
     restPort,
     streamsPort,
+    mcpPort,
     provider,
     tokenBudget: safeParseInt(env["TOKEN_BUDGET"], 2000),
     maxObservationsPerSession: safeParseInt(env["MAX_OBS_PER_SESSION"], 500),
