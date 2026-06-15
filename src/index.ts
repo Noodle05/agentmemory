@@ -93,6 +93,7 @@ import { registerEventTriggers } from "./triggers/events.js";
 import { registerMcpEndpoints } from "./mcp/server.js";
 import { getAllTools } from "./mcp/tools-registry.js";
 import { startViewerServer } from "./viewer/server.js";
+import { startMcpStreamServer } from "./mcp/stream-http.js";
 import { MetricsStore } from "./eval/metrics-store.js";
 import { DedupMap } from "./functions/dedup.js";
 import { registerHealthMonitor } from "./health/monitor.js";
@@ -533,6 +534,16 @@ async function main() {
     config.restPort,
   );
 
+  const mcpServer = await startMcpStreamServer(
+    config.mcpPort,
+    sdk,
+    kv,
+    secret,
+  );
+  bootLog(
+    `MCP Streamable HTTP: http://localhost:${config.mcpPort}/ (JSON-RPC)`,
+  );
+
   const autoForgetIntervalMs = parseInt(process.env.AUTO_FORGET_INTERVAL_MS || "3600000", 10);
   const consolidationIntervalMs = parseInt(process.env.CONSOLIDATION_INTERVAL_MS || "7200000", 10);
 
@@ -595,6 +606,7 @@ async function main() {
     dedupMap.stop();
     indexPersistence.stop();
     await new Promise<void>((resolve) => viewerServer.close(() => resolve()));
+    await new Promise<void>((resolve) => mcpServer.server.close(() => resolve()));
     await indexPersistence.save().catch((err) => {
       console.warn(`[agentmemory] Failed to save index on shutdown:`, err);
     });
