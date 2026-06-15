@@ -38,8 +38,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        III_VERSION: ${AGENTMEMORY_III_VERSION:-0.11.2}
     depends_on:
       iii-engine:
         condition: service_healthy
