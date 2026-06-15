@@ -7,6 +7,7 @@ const PORT_ENVS = [
   "III_STREAMS_PORT",
   "III_ENGINE_PORT",
   "III_ENGINE_URL",
+  "AGENTMEMORY_MCP_PORT",
 ] as const;
 
 describe("multi-instance port auto-derive (#750)", () => {
@@ -29,35 +30,49 @@ describe("multi-instance port auto-derive (#750)", () => {
     }
   });
 
-  it("default REST anchor yields canonical 3111/3112/49134 quartet", () => {
+  it("default REST anchor yields canonical 3111/3112/3114/49134 family", () => {
     const cfg = loadConfig();
     expect(cfg.restPort).toBe(3111);
     expect(cfg.streamsPort).toBe(3112);
+    expect(cfg.mcpPort).toBe(3114);
     expect(cfg.engineUrl).toBe("ws://localhost:49134");
   });
 
-  it("relocating REST drags streams + engine with it", () => {
+  it("relocating REST drags streams + MCP + engine with it", () => {
     process.env["III_REST_PORT"] = "3211";
     const cfg = loadConfig();
     expect(cfg.restPort).toBe(3211);
     expect(cfg.streamsPort).toBe(3212);
+    expect(cfg.mcpPort).toBe(3214);
     expect(cfg.engineUrl).toBe("ws://localhost:49234");
   });
 
-  it("instance N=2 block (3311) lands on 3312 + 49334", () => {
+  it("instance N=2 block (3311) lands on 3312 + 3314 + 49334", () => {
     process.env["III_REST_PORT"] = "3311";
     const cfg = loadConfig();
     expect(cfg.restPort).toBe(3311);
     expect(cfg.streamsPort).toBe(3312);
+    expect(cfg.mcpPort).toBe(3314);
     expect(cfg.engineUrl).toBe("ws://localhost:49334");
   });
 
-  it("explicit III_STREAM_PORT pins streams without affecting REST/engine", () => {
+  it("explicit III_STREAM_PORT pins streams without affecting REST/MCP/engine", () => {
     process.env["III_REST_PORT"] = "3211";
     process.env["III_STREAM_PORT"] = "9999";
     const cfg = loadConfig();
     expect(cfg.restPort).toBe(3211);
     expect(cfg.streamsPort).toBe(9999);
+    expect(cfg.mcpPort).toBe(3214);
+    expect(cfg.engineUrl).toBe("ws://localhost:49234");
+  });
+
+  it("explicit AGENTMEMORY_MCP_PORT pins MCP without affecting REST/streams/engine", () => {
+    process.env["III_REST_PORT"] = "3211";
+    process.env["AGENTMEMORY_MCP_PORT"] = "8888";
+    const cfg = loadConfig();
+    expect(cfg.restPort).toBe(3211);
+    expect(cfg.streamsPort).toBe(3212);
+    expect(cfg.mcpPort).toBe(8888);
     expect(cfg.engineUrl).toBe("ws://localhost:49234");
   });
 

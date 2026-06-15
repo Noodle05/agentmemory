@@ -161,7 +161,7 @@ export function loadConfig(): AgentMemoryConfig {
 
   const provider = detectProvider(env);
 
-  // Port quartet: REST is the anchor; streams/engine derive from it
+  // Port family: REST is the anchor — streams, MCP, and engine ports derive from it
   // unless individually overridden. Default anchor 3111 yields the
   // canonical 3112 streams / 49134 engine pair, but `III_REST_PORT=3211`
   // auto-picks 3212 + 49234 so a second instance doesn't collide (#750).
