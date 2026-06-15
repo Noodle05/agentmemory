@@ -318,7 +318,7 @@ export async function startMcpStreamServer(
     }
   });
 
-  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => server.listen(port, "0.0.0.0", resolve));
 
   const shutdown = async (): Promise<void> => {
     clearInterval(evictionTimer);
