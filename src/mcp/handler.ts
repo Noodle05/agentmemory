@@ -22,6 +22,9 @@ const IMPLEMENTED_TOOLS = new Set([
 
 let modeAnnounced = false;
 
+// Match the literal-placeholder guard in rest-proxy.ts so log lines
+// don't show `${AGENTMEMORY_URL}` when an MCP host passed the
+// placeholder through unexpanded.
 function displayAgentmemoryUrl(): string {
   const raw = process.env["AGENTMEMORY_URL"];
   if (!raw || (raw.startsWith("${") && raw.endsWith("}"))) {
@@ -320,6 +323,10 @@ async function handleLocal(
   }
 }
 
+// Forward to the server's full MCP surface so non-Claude clients can
+// reach all 53 tools (lessons, sentinels, slots, signals, graph, …)
+// instead of being capped at the 7 IMPLEMENTED_TOOLS set baked into
+// this shim. The server validates arguments per tool.
 async function handleProxyGeneric(
   toolName: string,
   args: Record<string, unknown>,
@@ -345,6 +352,9 @@ export async function handleToolCall(
   const handle = await resolveHandle();
   announceMode(handle);
 
+  // Tools the local InMemoryKV fallback doesn't implement: forward straight
+  // to the server. Local validation would otherwise raise "Unknown tool"
+  // (issue #234).
   if (!IMPLEMENTED_TOOLS.has(toolName)) {
     if (handle.mode === "proxy") {
       try {
