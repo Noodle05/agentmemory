@@ -56,6 +56,7 @@ services:
       III_ENGINE_URL: ws://iii-engine:49134
       III_REST_PORT: "3111"
       AGENTMEMORY_MCP_PORT: "3114"
+      AGENTMEMORY_REST_HOST: "iii-engine"
       AGENTMEMORY_VIEWER_HOST: "0.0.0.0"
       VIEWER_ALLOWED_HOSTS: "${VIEWER_ALLOWED_HOSTS:-localhost:3113,127.0.0.1:3113}"
     healthcheck:
