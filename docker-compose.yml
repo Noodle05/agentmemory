@@ -1,10 +1,4 @@
 services:
-  # One-shot init container: docker creates named volumes root:root mode
-  # 755, but the iii-engine image is distroless and runs as UID 65532
-  # with no `chown` of its own. Without this, /data is unwritable, the
-  # engine silently buffers in RAM, and state evaporates on every
-  # restart — the exact symptom v0.9.7's working-directory fix set out
-  # to solve. Runs once at compose-up and exits.
   iii-init:
     image: busybox:1.36
     user: "0:0"
@@ -14,15 +8,6 @@ services:
     restart: "no"
 
   iii-engine:
-    # Pinned to v0.11.2 — the last engine that runs agentmemory's current
-    # worker model cleanly. v0.11.6 introduces a new sandbox-everything-
-    # via-`iii worker add` model that agentmemory hasn't been refactored
-    # for yet; the architectural mismatch surfaces as EPIPE reconnect
-    # loops and empty search after save. Bump only after agentmemory is
-    # refactored to register as a sandboxed worker.
-    #
-    # Override per-shell or via .env file:
-    #   AGENTMEMORY_III_VERSION=0.11.7 docker compose up
     image: iiidev/iii:${AGENTMEMORY_III_VERSION:-0.11.2}
     user: "65532:65532"
     depends_on:
@@ -36,6 +21,39 @@ services:
     volumes:
       - iii-data:/data
       - ./iii-config.docker.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3111/agentmemory/livez"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  agentmemory:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        III_VERSION: ${AGENTMEMORY_III_VERSION:-0.11.2}
+    depends_on:
+      iii-engine:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3114:3114"
+      - "127.0.0.1:3113:3113"
+    volumes:
+      - iii-data:/data
+    environment:
+      AGENTMEMORY_TOOLS: all
+      AGENTMEMORY_SECRET_FILE: /data/.hmac
+      III_ENGINE_URL: ws://iii-engine:49134
+      III_REST_PORT: "3111"
+      AGENTMEMORY_MCP_PORT: "3114"
     restart: unless-stopped
     logging:
       driver: json-file

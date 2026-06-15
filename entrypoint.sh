@@ -1,3 +1,26 @@
+#!/bin/sh
+set -eu
+
+DATA_DIR="${AGENTMEMORY_DATA_DIR:-/data}"
+HMAC_FILE="${AGENTMEMORY_HMAC_FILE:-/data/.hmac}"
+
+mkdir -p "$DATA_DIR"
+chown -R node:node "$DATA_DIR"
+
+if [ ! -s "$HMAC_FILE" ]; then
+  SECRET="$(openssl rand -hex 32)"
+  umask 077
+  printf '%s\n' "$SECRET" > "$HMAC_FILE"
+  chmod 600 "$HMAC_FILE"
+  chown node:node "$HMAC_FILE"
+  echo "Generated new AGENTMEMORY_SECRET"
+fi
+
+if [ -z "${AGENTMEMORY_SECRET_FILE:-}" ]; then
+  export AGENTMEMORY_SECRET_FILE="$HMAC_FILE"
+fi
+
+cat > /app/iii-config.yaml <<'EOF'
 workers:
   - name: iii-http
     config:
@@ -5,7 +28,13 @@ workers:
       host: 0.0.0.0
       default_timeout: 180000
       cors:
-        allowed_origins: ["http://localhost:3111", "http://localhost:3113", "http://localhost:3114", "http://127.0.0.1:3111", "http://127.0.0.1:3113", "http://127.0.0.1:3114"]
+        allowed_origins:
+          - "http://localhost:3111"
+          - "http://localhost:3113"
+          - "http://localhost:3114"
+          - "http://127.0.0.1:3111"
+          - "http://127.0.0.1:3113"
+          - "http://127.0.0.1:3114"
         allowed_methods: [GET, POST, PUT, DELETE, OPTIONS]
   - name: iii-state
     config:
@@ -40,14 +69,10 @@ workers:
       enabled: true
       service_name: agentmemory
       exporter: memory
-      # See iii-config.yaml for the rationale on 0.1 / console-off (#519).
       sampling_ratio: 0.1
       metrics_enabled: true
       logs_enabled: true
       logs_console_output: false
-  - name: iii-exec
-    config:
-      watch:
-        - src/**/*.ts
-      exec:
-        - node dist/index.mjs
+EOF
+
+exec node /app/dist/index.mjs

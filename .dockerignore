@@ -1,0 +1,10 @@
+node_modules
+.git
+test
+specs
+deploy
+website
+data
+dist
+.claude
+.specify
