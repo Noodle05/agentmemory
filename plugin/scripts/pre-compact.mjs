@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execSync } from "node:child_process";
 import { basename } from "node:path";
+
 //#region src/hooks/_project.ts
 function resolveProject(cwd) {
 	const explicit = process.env["AGENTMEMORY_PROJECT_NAME"];
@@ -20,6 +21,7 @@ function resolveProject(cwd) {
 	} catch {}
 	return basename(dir);
 }
+
 //#endregion
 //#region src/hooks/pre-compact.ts
 function isSdkChildContext(payload) {
@@ -72,7 +74,7 @@ async function main() {
 	} catch {}
 }
 main();
-//#endregion
-export {};
 
+//#endregion
+export {  };
 //# sourceMappingURL=pre-compact.mjs.map
