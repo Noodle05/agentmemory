@@ -5,7 +5,6 @@ DATA_DIR="${AGENTMEMORY_DATA_DIR:-/data}"
 HMAC_FILE="${AGENTMEMORY_HMAC_FILE:-/data/.hmac}"
 
 mkdir -p "$DATA_DIR"
-chown -R node:node "$DATA_DIR"
 
 if [ ! -s "$HMAC_FILE" ]; then
   SECRET="$(openssl rand -hex 32)"
