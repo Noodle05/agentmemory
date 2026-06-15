@@ -98,7 +98,7 @@ AGENTMEMORY_SECRET="$(cat "$HMAC_FILE")"
 export AGENTMEMORY_SECRET
 
 # Start iii-engine in the background.
-iii run --config "$III_CONFIG" &
+iii --config "$III_CONFIG" &
 III_PID=$!
 
 _shutdown() {
@@ -106,7 +106,7 @@ _shutdown() {
   wait $III_PID 2>/dev/null || true
   exit 0
 }
-trap _shutdown SIGTERM SIGINT
+trap _shutdown TERM INT
 
 # Start agentmemory in the foreground; the container exits when it exits.
 gosu "$RUN_AS" node /app/dist/index.mjs
