@@ -45,8 +45,8 @@ services:
       iii-engine:
         condition: service_started
     ports:
-      - "127.0.0.1:3114:3114"
-      - "127.0.0.1:3113:3113"
+      - "3114:3114"
+      - "3113:3113"
     volumes:
       - agentmemory-data:/data
     env_file: .env
