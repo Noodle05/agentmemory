@@ -19,4 +19,8 @@ if [ -z "${AGENTMEMORY_SECRET_FILE:-}" ]; then
   export AGENTMEMORY_SECRET_FILE="$HMAC_FILE"
 fi
 
+if [ -z "${AGENTMEMORY_SECRET:-}" ]; then
+  export AGENTMEMORY_SECRET="$(cat "$HMAC_FILE")"
+fi
+
 exec node /app/dist/index.mjs
