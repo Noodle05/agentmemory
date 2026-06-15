@@ -12,9 +12,6 @@
  * Streamable HTTP contract (protocolVersion "2025-03-26").
  *
  * Observed in @modelcontextprotocol/node v2.0.0-alpha.2 with chunked transfer encoding.
- * See: https://github.com/modelcontextprotocol/typescript-sdk/issues/187
- *
- * Revisit this if the upstream SDK fixes the body-parsing issue.
  */
 
 import { createServer } from "node:http";
