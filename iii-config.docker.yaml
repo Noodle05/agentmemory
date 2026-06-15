@@ -5,7 +5,7 @@ workers:
       host: 0.0.0.0
       default_timeout: 180000
       cors:
-        allowed_origins: ["http://localhost:3111", "http://localhost:3113", "http://localhost:3114", "http://127.0.0.1:3111", "http://127.0.0.1:3113", "http://127.0.0.1:3114"]
+        allowed_origins: ["http://localhost:3111", "http://localhost:3113", "http://127.0.0.1:3111", "http://127.0.0.1:3113"]
         allowed_methods: [GET, POST, PUT, DELETE, OPTIONS]
   - name: iii-state
     config:
@@ -45,3 +45,9 @@ workers:
       metrics_enabled: true
       logs_enabled: true
       logs_console_output: false
+  - name: iii-exec
+    config:
+      watch:
+        - src/**/*.ts
+      exec:
+        - node dist/index.mjs
