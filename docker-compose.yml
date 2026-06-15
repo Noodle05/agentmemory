@@ -36,18 +36,6 @@ services:
     volumes:
       - iii-data:/data
       - ./iii-config.docker.yaml:/app/config.yaml:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3111/agentmemory/livez"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   agentmemory:
     build:
@@ -55,7 +43,7 @@ services:
       dockerfile: Dockerfile
     depends_on:
       iii-engine:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "127.0.0.1:3114:3114"
       - "127.0.0.1:3113:3113"
@@ -68,7 +56,7 @@ services:
       III_REST_PORT: "3111"
       AGENTMEMORY_MCP_PORT: "3114"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3111/agentmemory/livez"]
+      test: ["CMD", "curl", "-f", "http://iii-engine:3111/agentmemory/livez"]
       interval: 10s
       timeout: 5s
       retries: 5
