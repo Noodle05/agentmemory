@@ -98,7 +98,7 @@ AGENTMEMORY_SECRET="$(cat "$HMAC_FILE")"
 export AGENTMEMORY_SECRET
 
 # Start iii-engine in the background.
-iii --config "$III_CONFIG" &
+gosu "$RUN_AS" iii --config "$III_CONFIG" &
 III_PID=$!
 
 _shutdown() {
