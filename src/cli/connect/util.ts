@@ -43,6 +43,19 @@ const COPILOT_MCP_COMMAND =
         args: ["-y", "@agentmemory/mcp"],
       };
 
+// Stream HTTP MCP entry (alternative to stdio command):
+// clients that speak the Streamable HTTP transport (MCP spec 2025-03-26+)
+// can connect directly to the agentmemory MCP port at :3114 instead of
+// spawning an npx process. Use this block (or merge it with the stdio
+// "agentmemory" entry as an additional server entry) when the MCP server
+// is reachable as an HTTP endpoint — no npx bootstrap or stdio needed.
+export const AGENTMEMORY_MCP_HTTP_BLOCK = {
+  url: "http://localhost:3114/mcp",
+  headers: {
+    Authorization: "Bearer ${AGENTMEMORY_SECRET:-}",
+  },
+};
+
 export const AGENTMEMORY_COPILOT_MCP_BLOCK = {
   type: "local" as const,
   ...COPILOT_MCP_COMMAND,

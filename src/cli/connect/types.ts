@@ -27,7 +27,7 @@ export type ConnectAdapter = {
    * server only. Declared on the adapter so the picker never needs a
    * separate hardcoded list (#872). Defaults to "mcp" when omitted.
    */
-  category?: "native" | "mcp";
+  category?: "native" | "mcp" | "stream-http";
   detect(): boolean;
   install(opts: ConnectOptions): Promise<ConnectResult>;
 };

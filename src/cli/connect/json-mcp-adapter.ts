@@ -12,6 +12,15 @@ import {
   writeJsonAtomic,
 } from "./util.js";
 
+// MCP transport modes:
+// - "command" (default): stdio transport — npx @agentmemory/mcp spawns a
+//   child process; clients speak JSON-RPC over stdin/stdout. This is what
+//   every adapter here writes to .mcp.json today.
+// - "url": Streamable HTTP transport — clients connect to the MCP server's
+//   HTTP endpoint directly (http://localhost:3114/mcp) with a Bearer token.
+//   Clients that support the MCP Streamable HTTP spec can use this instead
+//   of the npx command. See AGENTMEMORY_MCP_HTTP_BLOCK in util.ts.
+
 export type JsonMcpAdapterConfig = {
   name: string;
   displayName: string;

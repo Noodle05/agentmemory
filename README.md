@@ -498,6 +498,49 @@ Imported sessions show up in the Replay picker alongside native ones. Under the 
 
 > **Heads-up if you rely on `import-jsonl` as your primary capture path:** Claude Code's `cleanupPeriodDays` (in `~/.claude/settings.json`, default **30**) auto-deletes JSONL transcripts older than that window from `~/.claude/projects/`. If you install agentmemory fresh on a months-old Claude Code history, anything older than 30 days is already gone before the first import. Either run `import-jsonl` on a cron, raise `cleanupPeriodDays` to something higher, or wire the auto-capture hooks (the default plugin install path) so each turn lands in agentmemory while the session is live and the JSONL cleanup stops mattering.
 
+### Docker
+
+Run agentmemory in a container with one command — no Node.js or npm required on the host.
+
+**Prerequisites:** Docker and docker-compose.
+
+```bash
+# Clone and start — iii engine + agentmemory worker + viewer + MCP Stream HTTP
+git clone https://github.com/rohitg00/agentmemory.git
+cd agentmemory
+docker compose build && docker compose up -d
+
+# Grab the auto-generated HMAC secret for MCP client auth
+docker compose logs agentmemory | grep AGENTMEMORY_SECRET
+# or: docker compose exec agentmemory cat /data/.hmac
+
+# Verify it is up
+curl -s http://localhost:3111/agentmemory/health | head -c 200
+```
+
+MCP clients that speak Streamable HTTP can connect directly without spawning
+an `npx` process:
+
+```json
+{
+  "mcpServers": {
+    "agentmemory": {
+      "url": "http://localhost:3114/mcp",
+      "headers": {
+        "Authorization": "Bearer <secret-from-/data/.hmac>"
+      }
+    }
+  }
+}
+```
+
+Stdio-based MCP clients (Cursor, Claude Code, etc.) still work through the
+`npx @agentmemory/mcp` shim as usual — set `AGENTMEMORY_URL=http://localhost:3111`
+and `AGENTMEMORY_SECRET` in the client's env block.
+
+See [specs/001-mcp-stream-dockerize/quickstart.md](specs/001-mcp-stream-dockerize/quickstart.md)
+for advanced Docker setups (custom ports, external volumes, multi-instance).
+
 ### Upgrade / Maintenance
 
 Use the maintenance command when you intentionally want to update your local runtime:
