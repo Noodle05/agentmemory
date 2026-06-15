@@ -19,6 +19,7 @@ WORKDIR /app
 COPY --from=build /app/dist/ ./dist/
 COPY --from=build /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev --no-fund --no-audit
+# Fallback default config; entrypoint.sh overwrites this for Docker at startup
 COPY iii-config.docker.yaml ./iii-config.yaml
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh

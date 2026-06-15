@@ -54,6 +54,12 @@ services:
       III_ENGINE_URL: ws://iii-engine:49134
       III_REST_PORT: "3111"
       AGENTMEMORY_MCP_PORT: "3114"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3111/agentmemory/livez"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
     logging:
       driver: json-file
