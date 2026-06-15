@@ -23,7 +23,7 @@ COPY --from=iii-image /app/iii /usr/local/bin/iii
 WORKDIR /app
 COPY --from=build /app/dist/ ./dist/
 COPY --from=build /app/package.json /app/package-lock.json ./
-RUN npm ci --omit=dev --no-fund --no-audit
+RUN npm ci --legacy-peer-deps --omit=dev --no-fund --no-audit
 
 ENV AGENTMEMORY_III_VERSION=${III_VERSION} \
     TINI_SUBREAPER=1
