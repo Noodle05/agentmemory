@@ -4,8 +4,9 @@ FROM iiidev/iii:${III_VERSION} AS iii-image
 
 FROM node:22-slim AS build
 WORKDIR /app
-COPY package.json package-lock.json tsconfig.json tsdown.config.ts ./
-RUN npm ci
+COPY package.json tsconfig.json tsdown.config.ts ./
+RUN npm install --package-lock-only --legacy-peer-deps --no-audit --no-fund
+RUN npm ci --legacy-peer-deps --no-audit --no-fund
 COPY src/ ./src/
 RUN npm run build
 
