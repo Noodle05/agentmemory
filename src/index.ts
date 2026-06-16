@@ -447,7 +447,7 @@ async function main() {
     }
   }
 
-  const needsRebuild = bm25Index.size === 0;
+  const needsRebuild = bm25Index.size === 0 || (vectorIndex !== null && vectorIndex.size === 0);
 
   if (needsRebuild) {
     // Fire-and-forget. rebuildIndex iterates every observation across
