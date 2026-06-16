@@ -367,6 +367,7 @@ export function registerSearchFunction(sdk: ISdk, kv: StateKV): void {
         effectiveLimit = Math.min(data.limit, MAX_LIMIT)
       }
       const projectFilter = typeof data.project === 'string' && data.project.trim().length > 0 ? data.project.trim() : undefined
+      const projectIdFilter = typeof (data as Record<string, unknown>).projectId === 'string' && ((data as Record<string, unknown>).projectId as string).trim().length > 0 ? ((data as Record<string, unknown>).projectId as string).trim() : undefined
       const cwdFilter = typeof data.cwd === 'string' && data.cwd.trim().length > 0 ? data.cwd.trim() : undefined
       // #817: agent-scope isolation. mem::search backs REST /search,
       // memory_recall and recall_context. Without filtering here a
@@ -471,7 +472,9 @@ export function registerSearchFunction(sdk: ISdk, kv: StateKV): void {
         if (filtering) {
           const s = await loadSession(r.sessionId)
           if (s) {
-            if (projectFilter && s.project !== projectFilter) continue
+            if (projectFilter && s.project !== projectFilter) {
+              if (!projectIdFilter || s.projectId !== projectIdFilter) continue
+            }
             if (cwdFilter && s.cwd !== cwdFilter) continue
           } else {
             // Session not found. Two cases arrive here:
@@ -490,7 +493,9 @@ export function registerSearchFunction(sdk: ISdk, kv: StateKV): void {
             // unscoped and let it through" to preserve backward-compatibility.
             if (projectFilter) {
               const memProject = await loadMemoryProject(r.obsId)
-              if (memProject !== null && memProject !== projectFilter) continue
+              if (memProject !== null && memProject !== projectFilter) {
+                if (!projectIdFilter) continue
+              }
             }
             // cwd filter does not apply to unbound entries.
           }

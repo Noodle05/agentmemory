@@ -3,6 +3,7 @@ import type { StateKV } from "../state/kv.js";
 import { KV, fingerprintId } from "../state/schema.js";
 import type { Lesson } from "../types.js";
 import { recordAudit } from "./audit.js";
+import { resolveProject } from "./identity.js";
 
 function reinforceLesson(lesson: Lesson): void {
   const now = new Date().toISOString();
@@ -60,6 +61,16 @@ export function registerLessonsFunctions(sdk: ISdk, kv: StateKV): void {
           ? data.confidence
           : 0.5;
 
+      // Resolve projectId from project string
+      let projectId: string | undefined;
+      const project = data.project?.trim();
+      if (project) {
+        try {
+          const resolved = await resolveProject(kv, { name: project });
+          projectId = resolved.projectId;
+        } catch { /* ignore */ }
+      }
+
       const now = new Date().toISOString();
       const lesson: Lesson = {
         id: fp,
@@ -70,6 +81,7 @@ export function registerLessonsFunctions(sdk: ISdk, kv: StateKV): void {
         source: data.source || "manual",
         sourceIds: data.sourceIds || [],
         project: data.project,
+        ...(projectId && { projectId }),
         tags: data.tags || [],
         createdAt: now,
         updatedAt: now,
@@ -86,10 +98,11 @@ export function registerLessonsFunctions(sdk: ISdk, kv: StateKV): void {
     },
   );
 
-  sdk.registerFunction("mem::lesson-recall", 
+  sdk.registerFunction("mem::lesson-recall",
     async (data: {
       query: string;
       project?: string;
+      projectId?: string;
       minConfidence?: number;
       limit?: number;
     }) => {
@@ -107,8 +120,14 @@ export function registerLessonsFunctions(sdk: ISdk, kv: StateKV): void {
         (l) => !l.deleted && l.confidence >= minConfidence,
       );
 
-      if (data.project) {
-        lessons = lessons.filter((l) => l.project === data.project);
+      if (data.projectId) {
+        lessons = lessons.filter(
+          (l) => l.projectId === data.projectId || l.project === data.projectId || (data.project && l.project === data.project),
+        );
+      } else if (data.project) {
+        lessons = lessons.filter(
+          (l) => l.project === data.project || (data.projectId && l.projectId === data.projectId),
+        );
       }
 
       const scored = lessons

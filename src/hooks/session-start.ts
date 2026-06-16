@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { resolveProject } from "./_project.js";
+import { resolveProject, collectGitRemotes } from "./_project.js";
 
 // Inlined from ./sdk-guard so each hook bundles to a single self-contained
 // .mjs (matches the pattern used by every other hook entry in tsdown.config).
@@ -54,12 +54,13 @@ async function main() {
     `ses_${Date.now().toString(36)}`;
   const cwd = (data.cwd as string) || process.cwd();
   const project = resolveProject(data.cwd as string | undefined);
+  const gitRemotes = collectGitRemotes(data.cwd as string | undefined);
 
   const url = `${REST_URL}/agentmemory/session/start`;
   const init: RequestInit = {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ sessionId, project, cwd }),
+    body: JSON.stringify({ sessionId, project, cwd, gitRemotes }),
   };
 
   if (!INJECT_CONTEXT) {

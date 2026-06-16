@@ -3,6 +3,7 @@ import type { Session, CompressedObservation, HookPayload, CommitLink, SessionSu
 import { withKeyedLock } from "../state/keyed-mutex.js";
 import { KV } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
+import { resolveProject } from "../functions/identity.js";
 import { getLatestHealth } from "../health/monitor.js";
 import type { MetricsStore } from "../eval/metrics-store.js";
 import type { ResilientProvider } from "../providers/resilient.js";
@@ -573,6 +574,12 @@ export function registerApiTriggers(
           },
         };
       }
+      const gitRemotes = Array.isArray(body.gitRemotes)
+        ? (body.gitRemotes as string[]).filter((r): r is string => typeof r === "string")
+        : [];
+      // Resolve project identity
+      const { projectId } = await resolveProject(kv, { name: project, gitRemotes });
+
       const title = typeof body.title === "string" ? body.title.trim() : undefined;
       // allow session/start to override AGENT_ID from request body
       // (multi-agent runtimes that route many roles through one server
@@ -585,6 +592,7 @@ export function registerApiTriggers(
       const session: Session = {
         id: sessionId,
         project,
+        projectId,
         cwd,
         startedAt: new Date().toISOString(),
         status: "active",
@@ -820,9 +828,15 @@ export function registerApiTriggers(
         ? undefined
         : explicitAgentId ??
           (isAgentScopeIsolated() ? getAgentId() : undefined);
-      const filtered = filterAgentId
+      let filtered = filterAgentId
         ? sessions.filter((s) => s.agentId === filterAgentId)
         : sessions;
+      const projectIdFilter = asNonEmptyString(req.query_params?.["projectId"]) ?? undefined;
+      if (projectIdFilter) {
+        filtered = filtered.filter(
+          (s) => s.projectId === projectIdFilter || s.project === projectIdFilter,
+        );
+      }
       const summaries = await Promise.all(
         filtered.map((s) =>
           kv.get<SessionSummary>(KV.summaries, s.id).catch(() => null),

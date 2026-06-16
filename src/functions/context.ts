@@ -12,6 +12,7 @@ import { KV } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
 import { recordAccessBatch } from "./access-tracker.js";
 import { logger } from "../logger.js";
+import { resolveProject } from "./identity.js";
 import {
   isSlotsEnabled,
   listPinnedSlots,
@@ -39,6 +40,12 @@ export function registerContextFunction(
     async (data: { sessionId: string; project: string; budget?: number }) => {
       const budget = data.budget || tokenBudget;
       const blocks: ContextBlock[] = [];
+
+      let projectId: string | undefined;
+      try {
+        const resolved = await resolveProject(kv, { name: data.project });
+        projectId = resolved.projectId;
+      } catch { /* ignore */ }
 
       const [pinnedSlots, profile, lessons] = await Promise.all([
         isSlotsEnabled()
@@ -103,10 +110,12 @@ export function registerContextFunction(
       // 10 to keep the block bounded since the outer token-budget loop
       // below will drop the whole block if it doesn't fit. #457.
       const relevantLessons = lessons
-        .filter((l) => !l.deleted && (!l.project || l.project === data.project))
+        .filter((l) => !l.deleted && (!l.project || l.project === data.project || (projectId && l.project === projectId)))
         .sort((a, b) => {
-          const scoreA = (a.project === data.project ? 1.5 : 1) * a.confidence;
-          const scoreB = (b.project === data.project ? 1.5 : 1) * b.confidence;
+          const aMatches = a.project === data.project || (projectId && a.project === projectId);
+          const bMatches = b.project === data.project || (projectId && b.project === projectId);
+          const scoreA = (aMatches ? 1.5 : 1) * a.confidence;
+          const scoreB = (bMatches ? 1.5 : 1) * b.confidence;
           return scoreB - scoreA;
         })
         .slice(0, 10);
@@ -134,7 +143,7 @@ export function registerContextFunction(
 
       const allSessions = await kv.list<Session>(KV.sessions);
       const sessions = allSessions
-        .filter((s) => s.project === data.project && s.id !== data.sessionId)
+        .filter((s) => (s.project === data.project || (projectId && s.projectId === projectId)) && s.id !== data.sessionId)
         .sort(
           (a, b) =>
             new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),

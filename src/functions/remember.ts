@@ -9,6 +9,7 @@ import { recordAudit } from "./audit.js";
 import { getSearchIndex, vectorIndexAddGuarded, vectorIndexRemove, flushIndexSave, scheduleIndexSave } from "./search.js";
 import { getAgentId } from "../config.js";
 import { logger } from "../logger.js";
+import { resolveProject } from "./identity.js";
 
 export function registerRememberFunction(sdk: ISdk, kv: StateKV): void {
   sdk.registerFunction("mem::remember", 
@@ -58,6 +59,16 @@ export function registerRememberFunction(sdk: ISdk, kv: StateKV): void {
         typeof data.project === "string" && data.project.trim().length > 0
           ? data.project.trim()
           : undefined;
+
+      let projectId: string | undefined;
+      if (project) {
+        try {
+          const resolved = await resolveProject(kv, { name: project });
+          projectId = resolved.projectId;
+        } catch {
+          projectId = undefined;
+        }
+      }
 
       return withKeyedLock("mem:remember", async () => {
         const existingMemories = await kv.list<Memory>(KV.memories);
@@ -115,6 +126,7 @@ export function registerRememberFunction(sdk: ISdk, kv: StateKV): void {
           isLatest: true,
           ...(callAgentId ? { agentId: callAgentId } : {}),
           ...(project !== undefined && { project }),
+          ...(projectId !== undefined && { projectId }),
         };
 
         if (data.ttlDays && typeof data.ttlDays === "number" && data.ttlDays > 0) {

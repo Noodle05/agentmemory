@@ -29,6 +29,7 @@ import { registerObserveFunction } from "./functions/observe.js";
 import { registerImageQuotaCleanup } from "./functions/image-quota-cleanup.js";
 import { registerVisionSearchFunctions } from "./functions/vision-search.js";
 import { registerSlotsFunctions, isSlotsEnabled, isReflectEnabled } from "./functions/slots.js";
+import { registerIdentityFunctions, runProjectMigration } from "./functions/identity.js";
 import { registerDiskSizeManager } from "./functions/disk-size-manager.js";
 import { registerCompressFunction } from "./functions/compress.js";
 import {
@@ -240,6 +241,9 @@ async function main() {
   if (isSlotsEnabled()) {
     registerSlotsFunctions(sdk, kv);
   }
+  // Run project identity migration before server accepts connections
+  await runProjectMigration(kv);
+  registerIdentityFunctions(sdk, kv);
   registerDiskSizeManager(sdk, kv);
   registerCompressFunction(sdk, kv, provider, metricsStore);
   registerSearchFunction(sdk, kv);
