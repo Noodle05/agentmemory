@@ -828,9 +828,15 @@ export function registerApiTriggers(
         ? undefined
         : explicitAgentId ??
           (isAgentScopeIsolated() ? getAgentId() : undefined);
-      const filtered = filterAgentId
+      let filtered = filterAgentId
         ? sessions.filter((s) => s.agentId === filterAgentId)
         : sessions;
+      const projectIdFilter = asNonEmptyString(req.query_params?.["projectId"]) ?? undefined;
+      if (projectIdFilter) {
+        filtered = filtered.filter(
+          (s) => s.projectId === projectIdFilter || s.project === projectIdFilter,
+        );
+      }
       const summaries = await Promise.all(
         filtered.map((s) =>
           kv.get<SessionSummary>(KV.summaries, s.id).catch(() => null),

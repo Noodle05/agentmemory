@@ -41,6 +41,12 @@ export function registerContextFunction(
       const budget = data.budget || tokenBudget;
       const blocks: ContextBlock[] = [];
 
+      let projectId: string | undefined;
+      try {
+        const resolved = await resolveProject(kv, { name: data.project });
+        projectId = resolved.projectId;
+      } catch { /* ignore */ }
+
       const [pinnedSlots, profile, lessons] = await Promise.all([
         isSlotsEnabled()
           ? listPinnedSlots(kv, data.project).catch(() => [] as MemorySlot[])
@@ -104,10 +110,12 @@ export function registerContextFunction(
       // 10 to keep the block bounded since the outer token-budget loop
       // below will drop the whole block if it doesn't fit. #457.
       const relevantLessons = lessons
-        .filter((l) => !l.deleted && (!l.project || l.project === data.project))
+        .filter((l) => !l.deleted && (!l.project || l.project === data.project || (projectId && l.project === projectId)))
         .sort((a, b) => {
-          const scoreA = (a.project === data.project ? 1.5 : 1) * a.confidence;
-          const scoreB = (b.project === data.project ? 1.5 : 1) * b.confidence;
+          const aMatches = a.project === data.project || (projectId && a.project === projectId);
+          const bMatches = b.project === data.project || (projectId && b.project === projectId);
+          const scoreA = (aMatches ? 1.5 : 1) * a.confidence;
+          const scoreB = (bMatches ? 1.5 : 1) * b.confidence;
           return scoreB - scoreA;
         })
         .slice(0, 10);
@@ -132,12 +140,6 @@ export function registerContextFunction(
           sourceIds: relevantLessons.map((l) => l.id),
         });
       }
-
-      let projectId: string | undefined;
-      try {
-        const resolved = await resolveProject(kv, { name: data.project });
-        projectId = resolved.projectId;
-      } catch { /* ignore */ }
 
       const allSessions = await kv.list<Session>(KV.sessions);
       const sessions = allSessions

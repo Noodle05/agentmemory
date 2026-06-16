@@ -86,10 +86,11 @@ export function registerLessonsFunctions(sdk: ISdk, kv: StateKV): void {
     },
   );
 
-  sdk.registerFunction("mem::lesson-recall", 
+  sdk.registerFunction("mem::lesson-recall",
     async (data: {
       query: string;
       project?: string;
+      projectId?: string;
       minConfidence?: number;
       limit?: number;
     }) => {
@@ -107,7 +108,11 @@ export function registerLessonsFunctions(sdk: ISdk, kv: StateKV): void {
         (l) => !l.deleted && l.confidence >= minConfidence,
       );
 
-      if (data.project) {
+      if (data.projectId) {
+        lessons = lessons.filter(
+          (l) => l.project === data.projectId || (data.project && l.project === data.project),
+        );
+      } else if (data.project) {
         lessons = lessons.filter((l) => l.project === data.project);
       }
 

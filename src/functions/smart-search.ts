@@ -16,6 +16,7 @@ import {
   getFollowupWindowSeconds,
 } from "../config.js";
 import { logger } from "../logger.js";
+import { resolveProject } from "./identity.js";
 import { getCounters } from "../telemetry/setup.js";
 
 // #771: smart-search followup-rate diagnostic. Stored per session as
@@ -186,6 +187,16 @@ export function registerSmartSearchFunction(
       const lessonLimit = Math.min(limit, 10);
       const includeLessons = data.includeLessons !== false;
 
+      let projectId: string | undefined;
+      if (data.project) {
+        try {
+          const resolved = await resolveProject(kv, { name: data.project });
+          projectId = resolved.projectId;
+        } catch {
+          logger.warn("Smart search: projectId resolution failed", { project: data.project });
+        }
+      }
+
       // Over-fetch when filtering. Hybrid search can't filter on
       // agentId (BM25/vector indexes don't carry it), so we ask the
       // searcher for more hits than we need and trim post-filter. 3×
@@ -199,7 +210,7 @@ export function registerSmartSearchFunction(
       const [hybridResults, lessons] = await Promise.all([
         searchFn(data.query, overFetchLimit),
         includeLessons
-          ? recallLessons(sdk, data.query, lessonLimit, data.project)
+          ? recallLessons(sdk, data.query, lessonLimit, data.project, projectId)
           : Promise.resolve([]),
       ]);
 
@@ -292,11 +303,12 @@ async function recallLessons(
   query: string,
   limit: number,
   project?: string,
+  projectId?: string,
 ): Promise<CompactLessonResult[]> {
   try {
     const result = (await sdk.trigger({
       function_id: "mem::lesson-recall",
-      payload: { query, limit, project },
+      payload: { query, limit, project, projectId },
     })) as { success?: boolean; lessons?: Array<Lesson & { score?: number }> };
     if (!result?.success || !Array.isArray(result.lessons)) return [];
     return result.lessons.map((l) => ({
