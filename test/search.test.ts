@@ -63,6 +63,7 @@ describe("mem::search", () => {
     const session: Session = {
       id: "ses_1",
       project: "demo",
+      projectId: "test-project-id",
       cwd: "/tmp/demo",
       startedAt: "2026-01-01T00:00:00Z",
       status: "completed",
@@ -169,6 +170,8 @@ describe("mem::search", () => {
       strength: 7,
       version: 1,
       isLatest: true,
+      project: "demo",
+      projectId: "test-project-id",
     });
     // Force the rebuild to pick up the new memory (mem::search only
     // rebuilds on first call when idx.size === 0).
