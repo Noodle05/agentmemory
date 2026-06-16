@@ -58,7 +58,7 @@ describe("resolveProject", () => {
       gitRemotes: ["git@github.com:test/repo.git"],
     });
     expect(isNew).toBe(true);
-    expect(projectId).toMatch(/^proj_/);
+    expect(projectId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(project.displayName).toBe("test-project");
     expect(project.identitySignals).toContain("github.com/test/repo");
   });

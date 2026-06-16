@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ISdk } from "iii-sdk";
 import type { Project, Session, Memory } from "../types.js";
 import { KV } from "../state/schema.js";
@@ -52,7 +53,7 @@ export async function resolveProject(
   }
 
   // Create new project
-  const projectId = `proj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const projectId = randomUUID();
   const identitySignals: string[] = [];
   for (const norm of normalizedRemotes) identitySignals.push(norm);
   if (name) identitySignals.push(name);
@@ -94,17 +95,35 @@ export async function runProjectMigration(kv: StateKV): Promise<number> {
   }
 
   // Backfill sessions
+  let sessionsBackfilled = 0;
   for (const session of sessions) {
     if (session.projectId) continue;
     if (!session.project) continue;
     const signalId = await kv.get<string>(KV.projectSignals, session.project);
     if (signalId) {
       await kv.set(KV.sessions, session.id, { ...session, projectId: signalId });
+      sessionsBackfilled++;
+    }
+  }
+
+  // Backfill memories
+  let memoriesBackfilled = 0;
+  for (const memory of memories) {
+    if (memory.projectId) continue;
+    if (!memory.project) continue;
+    const signalId = await kv.get<string>(KV.projectSignals, memory.project);
+    if (signalId) {
+      await kv.set(KV.memories, memory.id, { ...memory, projectId: signalId });
+      memoriesBackfilled++;
     }
   }
 
   if (created > 0) {
-    logger.info("project migration complete", { projectsCreated: created, sessionsBackfilled: sessions.length });
+    logger.info("project migration complete", {
+      projectsCreated: created,
+      sessionsBackfilled,
+      memoriesBackfilled,
+    });
   }
   return created;
 }

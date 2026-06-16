@@ -818,6 +818,7 @@ export interface Lesson {
   source: "crystal" | "manual" | "consolidation";
   sourceIds: string[];
   project?: string;
+  projectId?: string;
   tags: string[];
   createdAt: string;
   updatedAt: string;
