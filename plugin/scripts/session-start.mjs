@@ -1,8 +1,30 @@
 #!/usr/bin/env node
 import { execSync } from "node:child_process";
 import { basename } from "node:path";
-
 //#region src/hooks/_project.ts
+function collectGitRemotes(cwd) {
+	const dir = cwd && cwd.trim() ? cwd : process.cwd();
+	try {
+		const out = execSync("git remote -v", {
+			cwd: dir,
+			stdio: [
+				"ignore",
+				"pipe",
+				"ignore"
+			],
+			timeout: 500
+		}).toString().trim();
+		if (!out) return [];
+		const remotes = [];
+		for (const line of out.split("\n")) {
+			const parts = line.split(/\s+/);
+			if (parts.length >= 2) remotes.push(parts[1]);
+		}
+		return [...new Set(remotes)];
+	} catch {
+		return [];
+	}
+}
 function resolveProject(cwd) {
 	const explicit = process.env["AGENTMEMORY_PROJECT_NAME"];
 	if (explicit && explicit.trim()) return explicit.trim();
@@ -21,7 +43,6 @@ function resolveProject(cwd) {
 	} catch {}
 	return basename(dir);
 }
-
 //#endregion
 //#region src/hooks/session-start.ts
 function isSdkChildContext(payload) {
@@ -52,6 +73,7 @@ async function main() {
 	const sessionId = data.session_id || data.sessionId || `ses_${Date.now().toString(36)}`;
 	const cwd = data.cwd || process.cwd();
 	const project = resolveProject(data.cwd);
+	const gitRemotes = collectGitRemotes(data.cwd);
 	const url = `${REST_URL}/agentmemory/session/start`;
 	const init = {
 		method: "POST",
@@ -59,7 +81,8 @@ async function main() {
 		body: JSON.stringify({
 			sessionId,
 			project,
-			cwd
+			cwd,
+			gitRemotes
 		})
 	};
 	if (!INJECT_CONTEXT) {
@@ -81,7 +104,7 @@ async function main() {
 	} catch {}
 }
 main();
-
 //#endregion
-export {  };
+export {};
+
 //# sourceMappingURL=session-start.mjs.map

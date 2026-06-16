@@ -9,5 +9,7 @@
   "license": "Apache-2.0",
   "homepage": "https://github.com/rohitg00/agentmemory",
   "repository": "https://github.com/rohitg00/agentmemory",
-  "skills": ["./skills/"]
+  "skills": ["./skills/"],
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
 }

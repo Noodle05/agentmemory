@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { resolveProject } from "./_project.js";
+import { resolveProject, collectGitRemotes } from "./_project.js";
 
 // Inlined from ./sdk-guard so each hook bundles to a single self-contained
 // .mjs (matches the pattern used by every other hook entry in tsdown.config).
@@ -9,14 +9,20 @@ function isSdkChildContext(payload: unknown): boolean {
   return (payload as { entrypoint?: unknown }).entrypoint === "sdk-ts";
 }
 
+// Subagent-start hook.
+//
+// Always records a subagent-start observation (fire-and-forget). When
+// AGENTMEMORY_INJECT_CONTEXT=true, fetches project context from agentmemory
+// and outputs it as JSON hookSpecificOutput.additionalContext so Claude Code
+// injects it into the subagent's system prompt. Default off — same reasoning
+// as session-start (#143); see pre-tool-use.ts for the full explanation.
+const INJECT_CONTEXT = process.env["AGENTMEMORY_INJECT_CONTEXT"] === "true";
+
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
 
-// Passive telemetry only — nothing reads the response, so the previous
-// `await` was pure latency. Tightened from 2000ms to a defensive cap so a
-// slow/unreachable server can't stack onto every concurrent subagent
-// startup (#221).
-const TIMEOUT_MS = 800;
+const INJECT_TIMEOUT_MS = 1500;
+const OBSERVE_TIMEOUT_MS = 800;
 
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -40,26 +46,57 @@ async function main() {
   if (isSdkChildContext(data)) return;
 
   const sessionId = ((data.session_id || data.sessionId) as string) || "unknown";
+  const cwd = (data.cwd as string) || process.cwd();
+  const project = resolveProject(data.cwd as string | undefined);
+  const gitRemotes = collectGitRemotes(data.cwd as string | undefined);
   const agentId = data.agent_id || data.agentName;
   const agentType = data.agent_type || data.agentDisplayName || data.agentName;
 
+  // 1. Record observation (fire-and-forget — caller never reads the response)
   fetch(`${REST_URL}/agentmemory/observe`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({
       hookType: "subagent_start",
       sessionId,
-      project: resolveProject(data.cwd as string | undefined),
-      cwd: (data.cwd as string | undefined) || process.cwd(),
+      project,
+      cwd,
+      gitRemotes,
       timestamp: new Date().toISOString(),
       data: {
         agent_id: agentId,
         agent_type: agentType,
       },
     }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(OBSERVE_TIMEOUT_MS),
   }).catch(() => {});
-  setTimeout(() => process.exit(0), 500).unref();
+
+  // 2. Inject project context if enabled (JSON output format)
+  if (INJECT_CONTEXT) {
+    try {
+      const res = await fetch(`${REST_URL}/agentmemory/context`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ sessionId, project, budget: 1500 }),
+        signal: AbortSignal.timeout(INJECT_TIMEOUT_MS),
+      });
+      if (res.ok) {
+        const result = (await res.json()) as { context?: string };
+        if (result.context) {
+          process.stdout.write(
+            JSON.stringify({
+              hookSpecificOutput: {
+                hookEventName: "SubagentStart",
+                additionalContext: result.context,
+              },
+            }),
+          );
+        }
+      }
+    } catch {
+      // silently fail — don't block subagent startup
+    }
+  }
 }
 
 main();
