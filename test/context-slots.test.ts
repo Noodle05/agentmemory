@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { registerContextFunction } from "../src/functions/context.js";
 import { KV } from "../src/state/schema.js";
 
+const TEST_PROJECT = "test-project";
+
 function mockKV() {
   const store = new Map<string, Map<string, unknown>>();
   return {
@@ -46,8 +48,9 @@ async function seedPinnedSlot(
   label: string,
   content: string,
   scope: "project" | "global" = "global",
+  project?: string,
 ) {
-  const target = scope === "global" ? KV.globalSlots : KV.slots;
+  const target = scope === "global" ? KV.globalSlots : KV.slots(project ?? TEST_PROJECT);
   await kv.set(target, label, {
     label,
     content,
@@ -87,7 +90,7 @@ describe("mem::context — pinned slot injection", () => {
 
       const result = await handler({
         sessionId: "ses_a",
-        project: "/tmp/proj",
+        project: TEST_PROJECT,
       });
 
       expect(result.context).toContain("tool_guidelines");
@@ -101,7 +104,7 @@ describe("mem::context — pinned slot injection", () => {
 
       const result = await handler({
         sessionId: "ses_b",
-        project: "/tmp/proj",
+        project: TEST_PROJECT,
       });
 
       const guidelinesIdx = result.context.indexOf("tool_guidelines");
@@ -126,7 +129,7 @@ describe("mem::context — pinned slot injection", () => {
 
       const result = await handler({
         sessionId: "ses_c",
-        project: "/tmp/proj",
+        project: TEST_PROJECT,
       });
 
       expect(result.context).not.toContain("unpinned-content-alpha");
@@ -137,7 +140,7 @@ describe("mem::context — pinned slot injection", () => {
 
       const result = await handler({
         sessionId: "ses_d",
-        project: "/tmp/proj",
+        project: TEST_PROJECT,
       });
 
       expect(result.context).not.toContain("persona");
@@ -149,7 +152,7 @@ describe("mem::context — pinned slot injection", () => {
 
       const result = await handler({
         sessionId: "ses_e",
-        project: "/tmp/proj",
+        project: TEST_PROJECT,
       });
 
       expect(result.context).toContain("project-value");
@@ -167,7 +170,7 @@ describe("mem::context — pinned slot injection", () => {
 
       const result = await handler({
         sessionId: "ses_f",
-        project: "/tmp/proj",
+        project: TEST_PROJECT,
       });
 
       expect(result.context).not.toContain("tool_guidelines");
