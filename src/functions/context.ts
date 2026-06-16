@@ -12,6 +12,7 @@ import { KV } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
 import { recordAccessBatch } from "./access-tracker.js";
 import { logger } from "../logger.js";
+import { resolveProject } from "./identity.js";
 import {
   isSlotsEnabled,
   listPinnedSlots,
@@ -132,9 +133,15 @@ export function registerContextFunction(
         });
       }
 
+      let projectId: string | undefined;
+      try {
+        const resolved = await resolveProject(kv, { name: data.project });
+        projectId = resolved.projectId;
+      } catch { /* ignore */ }
+
       const allSessions = await kv.list<Session>(KV.sessions);
       const sessions = allSessions
-        .filter((s) => s.project === data.project && s.id !== data.sessionId)
+        .filter((s) => (s.project === data.project || (projectId && s.projectId === projectId)) && s.id !== data.sessionId)
         .sort(
           (a, b) =>
             new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),

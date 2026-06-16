@@ -67,6 +67,8 @@ export const KV = {
   imageEmbeddings: "mem:image-embeddings",
   slots: (project: string) => `mem:slots:${project}`,
   globalSlots: "mem:slots:global",
+  projects: "mem:projects",
+  projectSignals: "mem:project-signals",
   state: "mem:state",
   commits: "mem:commits",
   // #771: tracks the most recent smart-search call per session, used by

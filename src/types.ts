@@ -1,6 +1,14 @@
+export interface Project {
+  id: string;
+  displayName: string;
+  identitySignals: string[];
+  createdAt: string;
+}
+
 export interface Session {
   id: string;
   project: string;
+  projectId?: string;
   cwd: string;
   startedAt: string;
   endedAt?: string;
@@ -102,6 +110,7 @@ export interface Memory {
   imageData?: string;
   agentId?: string;
   project?: string;
+  projectId?: string;
 }
 
 export interface SessionSummary {
