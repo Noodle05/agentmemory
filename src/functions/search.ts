@@ -13,6 +13,7 @@ import { getAgentId, isAgentScopeIsolated } from "../config.js";
 let index: SearchIndex | null = null
 let vectorIndex: VectorIndex | null = null
 let currentEmbeddingProvider: EmbeddingProvider | null = null
+let loggedMissingProvider = false
 
 export function getSearchIndex(): SearchIndex {
   if (!index) index = new SearchIndex()
@@ -99,7 +100,16 @@ export async function vectorIndexAddGuarded(
 ): Promise<boolean> {
   const vi = vectorIndex
   const ep = currentEmbeddingProvider
-  if (!vi || !ep) return false
+  if (!vi || !ep) {
+    if (!loggedMissingProvider) {
+      logger.warn("vector-index add: no provider/index — skipping all vector writes", {
+        hasIndex: !!vi,
+        hasProvider: !!ep,
+      });
+      loggedMissingProvider = true;
+    }
+    return false;
+  }
   try {
     const embedding = await ep.embed(clipEmbedInput(text))
     if (embedding.length !== ep.dimensions) {
@@ -145,7 +155,17 @@ export async function vectorIndexAddBatchGuarded(
 ): Promise<{ ok: number; fail: number }> {
   const vi = vectorIndex
   const ep = currentEmbeddingProvider
-  if (!vi || !ep || items.length === 0) return { ok: 0, fail: 0 }
+  if (!vi || !ep) {
+    if (!loggedMissingProvider && items.length > 0) {
+      logger.warn("vector-index add batch: no provider/index — skipping all vector writes", {
+        hasIndex: !!vi,
+        hasProvider: !!ep,
+      });
+      loggedMissingProvider = true;
+    }
+    return { ok: 0, fail: items.length };
+  }
+  if (items.length === 0) return { ok: 0, fail: 0 }
 
   let embeddings: Float32Array[]
   try {
