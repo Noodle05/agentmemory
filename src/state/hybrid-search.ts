@@ -10,6 +10,7 @@ import type {
 import { memoryToObservation } from "./memory-utils.js";
 import type { StateKV } from "./kv.js";
 import { KV } from "./schema.js";
+import { logger } from "../logger.js";
 import {
   GraphRetrieval,
   type GraphRetrievalResult,
@@ -92,8 +93,11 @@ export class HybridSearch {
       try {
         queryEmbedding = await this.embeddingProvider.embed(query);
         vectorResults = this.vector.search(queryEmbedding, limit * 2);
-      } catch {
-        // fall through to BM25-only
+      } catch (err) {
+        logger.warn("hybrid-search: query embedding failed — falling back to BM25-only", {
+          provider: this.embeddingProvider.name,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
