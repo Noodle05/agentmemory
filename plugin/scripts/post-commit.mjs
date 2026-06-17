@@ -10,7 +10,7 @@ function isSdkChildContext(payload) {
 }
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
-process.env["CLAUDE_PLUGIN_OPTION_timezone"];
+process.env["CLAUDE_PLUGIN_OPTION_TIMEZONE"];
 const TIMEOUT_MS = 1500;
 function authHeaders() {
 	const h = { "Content-Type": "application/json" };

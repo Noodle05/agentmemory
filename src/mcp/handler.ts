@@ -157,13 +157,20 @@ function validate(toolName: string, args: Record<string, unknown>): Validated {
   }
 }
 
+function appendTimezone(path: string, tz?: string): string {
+  if (!tz) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}timezone=${encodeURIComponent(tz)}`;
+}
+
 async function handleProxy(
   v: Validated,
   handle: ProxyHandle,
+  tz?: string,
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   switch (v.tool) {
     case "memory_save": {
-      const result = await handle.call("/agentmemory/remember", {
+      const result = await handle.call(appendTimezone("/agentmemory/remember", tz), {
         method: "POST",
         body: JSON.stringify({
           content: v.content,
@@ -181,7 +188,7 @@ async function handleProxy(
         format: v.format ?? "full",
       };
       if (v.tokenBudget != null) body["token_budget"] = v.tokenBudget;
-      const result = await handle.call("/agentmemory/search", {
+      const result = await handle.call(appendTimezone("/agentmemory/search", tz), {
         method: "POST",
         body: JSON.stringify(body),
       });
@@ -191,7 +198,7 @@ async function handleProxy(
       const body: Record<string, unknown> = { query: v.query, limit: v.limit };
       if (v.format != null) body["format"] = v.format;
       if (v.tokenBudget != null) body["token_budget"] = v.tokenBudget;
-      const result = await handle.call("/agentmemory/smart-search", {
+      const result = await handle.call(appendTimezone("/agentmemory/smart-search", tz), {
         method: "POST",
         body: JSON.stringify(body),
       });
@@ -199,25 +206,25 @@ async function handleProxy(
     }
     case "memory_sessions": {
       const result = await handle.call(
-        `/agentmemory/sessions?limit=${v.limit}`,
+        appendTimezone(`/agentmemory/sessions?limit=${v.limit}`, tz),
         { method: "GET" },
       );
       return textResponse(result, true);
     }
     case "memory_governance_delete": {
-      const result = await handle.call("/agentmemory/governance/memories", {
+      const result = await handle.call(appendTimezone("/agentmemory/governance/memories", tz), {
         method: "DELETE",
         body: JSON.stringify({ memoryIds: v.memoryIds, reason: v.reason }),
       });
       return textResponse(result);
     }
     case "memory_export": {
-      const result = await handle.call("/agentmemory/export", { method: "GET" });
+      const result = await handle.call(appendTimezone("/agentmemory/export", tz), { method: "GET" });
       return textResponse(result, true);
     }
     case "memory_audit": {
       const result = await handle.call(
-        `/agentmemory/audit?limit=${v.limit}`,
+        appendTimezone(`/agentmemory/audit?limit=${v.limit}`, tz),
         { method: "GET" },
       );
       return textResponse(result, true);
@@ -331,8 +338,9 @@ async function handleProxyGeneric(
   toolName: string,
   args: Record<string, unknown>,
   handle: ProxyHandle,
+  tz?: string,
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const result = (await handle.call("/agentmemory/mcp/call", {
+  const result = (await handle.call(appendTimezone("/agentmemory/mcp/call", tz), {
     method: "POST",
     body: JSON.stringify({ name: toolName, arguments: args }),
   })) as { content?: Array<{ type: string; text: string }> } | null;
@@ -352,13 +360,17 @@ export async function handleToolCall(
   const handle = await resolveHandle();
   announceMode(handle);
 
+  const tz = typeof _config?.timezone === "string" && _config.timezone.trim().length > 0
+    ? _config.timezone.trim()
+    : undefined;
+
   // Tools the local InMemoryKV fallback doesn't implement: forward straight
   // to the server. Local validation would otherwise raise "Unknown tool"
   // (issue #234).
   if (!IMPLEMENTED_TOOLS.has(toolName)) {
     if (handle.mode === "proxy") {
       try {
-        return await handleProxyGeneric(toolName, args, handle);
+        return await handleProxyGeneric(toolName, args, handle, tz);
       } catch (err) {
         process.stderr.write(
           `[@agentmemory/mcp] proxy call failed for ${toolName}: ${err instanceof Error ? err.message : String(err)}\n`,
@@ -375,7 +387,7 @@ export async function handleToolCall(
   const validated = validate(toolName, args);
   if (handle.mode === "proxy") {
     try {
-      return await handleProxy(validated, handle);
+      return await handleProxy(validated, handle, tz);
     } catch (err) {
       process.stderr.write(
         `[@agentmemory/mcp] proxy call failed for ${toolName}: ${err instanceof Error ? err.message : String(err)}; invalidating handle and falling back to local KV\n`,

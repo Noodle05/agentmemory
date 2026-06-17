@@ -20,7 +20,7 @@ const INJECT_CONTEXT = process.env["AGENTMEMORY_INJECT_CONTEXT"] === "true";
 
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
-const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_TIMEZONE"] || "";
 
 // When the server is unreachable a 5s timeout multiplies hard under
 // concurrent fan-out (Slack bots, multi-agent harnesses) and becomes a
