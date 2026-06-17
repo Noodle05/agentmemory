@@ -51,7 +51,7 @@ describe("MCP tool surface default (#553)", () => {
   });
 
   it("plugin .mcp.json provides default env interpolation so CC parse never fails (#510)", () => {
-    const raw = readFileSync("plugin/.mcp.json", "utf-8");
+    const raw = readFileSync("plugin/.mcp.copilot.json", "utf-8");
     const cfg = JSON.parse(raw) as {
       mcpServers: { agentmemory: { env: Record<string, string> } };
     };
