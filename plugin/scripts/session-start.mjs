@@ -53,6 +53,7 @@ function isSdkChildContext(payload) {
 const INJECT_CONTEXT = process.env["AGENTMEMORY_INJECT_CONTEXT"] === "true";
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
 const INJECT_TIMEOUT_MS = 1500;
 const REGISTER_TIMEOUT_MS = 800;
 function authHeaders() {
@@ -74,7 +75,7 @@ async function main() {
 	const cwd = data.cwd || process.cwd();
 	const project = resolveProject(data.cwd);
 	const gitRemotes = collectGitRemotes(data.cwd);
-	const url = `${REST_URL}/agentmemory/session/start`;
+	const url = `${REST_URL}/agentmemory/session/start` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : "");
 	const init = {
 		method: "POST",
 		headers: authHeaders(),

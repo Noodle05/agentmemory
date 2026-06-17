@@ -20,6 +20,7 @@ const INJECT_CONTEXT = process.env["AGENTMEMORY_INJECT_CONTEXT"] === "true";
 
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
 
 const INJECT_TIMEOUT_MS = 1500;
 const OBSERVE_TIMEOUT_MS = 800;
@@ -53,7 +54,7 @@ async function main() {
   const agentType = data.agent_type || data.agentDisplayName || data.agentName;
 
   // 1. Record observation (fire-and-forget — caller never reads the response)
-  fetch(`${REST_URL}/agentmemory/observe`, {
+  fetch(`${REST_URL}/agentmemory/observe` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : ""), {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({
@@ -74,7 +75,7 @@ async function main() {
   // 2. Inject project context if enabled (JSON output format)
   if (INJECT_CONTEXT) {
     try {
-      const res = await fetch(`${REST_URL}/agentmemory/context`, {
+      const res = await fetch(`${REST_URL}/agentmemory/context` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : ""), {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ sessionId, project, budget: 1500 }),

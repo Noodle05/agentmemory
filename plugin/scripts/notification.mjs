@@ -29,6 +29,7 @@ function isSdkChildContext(payload) {
 }
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
 function authHeaders() {
 	const h = { "Content-Type": "application/json" };
 	if (SECRET) h["Authorization"] = `Bearer ${SECRET}`;
@@ -48,7 +49,7 @@ async function main() {
 	if (notificationType !== "permission_prompt") return;
 	const rawSessionId = data.session_id ?? data.sessionId;
 	const sessionId = typeof rawSessionId === "string" && rawSessionId.length > 0 ? rawSessionId : "unknown";
-	fetch(`${REST_URL}/agentmemory/observe`, {
+	fetch(`${REST_URL}/agentmemory/observe` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : ""), {
 		method: "POST",
 		headers: authHeaders(),
 		body: JSON.stringify({

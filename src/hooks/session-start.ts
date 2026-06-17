@@ -20,6 +20,7 @@ const INJECT_CONTEXT = process.env["AGENTMEMORY_INJECT_CONTEXT"] === "true";
 
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
 
 // When the server is unreachable a 5s timeout multiplies hard under
 // concurrent fan-out (Slack bots, multi-agent harnesses) and becomes a
@@ -56,7 +57,7 @@ async function main() {
   const project = resolveProject(data.cwd as string | undefined);
   const gitRemotes = collectGitRemotes(data.cwd as string | undefined);
 
-  const url = `${REST_URL}/agentmemory/session/start`;
+  const url = `${REST_URL}/agentmemory/session/start` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : "");
   const init: RequestInit = {
     method: "POST",
     headers: authHeaders(),

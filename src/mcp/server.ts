@@ -10,8 +10,9 @@ import type {
 } from "../types.js";
 import { getVisibleTools } from "./tools-registry.js";
 import { timingSafeCompare } from "../auth.js";
-import { getAgentId, isAgentScopeIsolated } from "../config.js";
+import { getAgentId, isAgentScopeIsolated, getConfiguredTimezone } from "../config.js";
 import { resolveProject } from "../functions/identity.js";
+import { resolveTimezone, deepConvertTimestamps } from "../utils/timezone.js";
 
 type McpResponse = {
   status_code: number;
@@ -39,6 +40,17 @@ function parseCsvList(value: unknown): string[] {
       .filter(Boolean);
   }
   return [];
+}
+
+function extractTimezoneHeader(req: ApiRequest): string | undefined {
+  const raw = req.headers?.["x-timezone"] ?? req.headers?.["X-Timezone"];
+  if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
+  return undefined;
+}
+
+function mcpTextBody(data: unknown, timezone: string | null): { content: Array<{ type: string; text: string }> } {
+  const formatted = timezone ? deepConvertTimestamps(data, timezone) : data;
+  return { content: [{ type: "text", text: JSON.stringify(formatted, null, 2) }] };
 }
 
 export function registerMcpEndpoints(
@@ -114,6 +126,7 @@ export function registerMcpEndpoints(
                 body: { error: "token_budget must be a positive integer" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             // #817: forward agentId so mem::search applies the same
             // isolation filter smart-search uses. Default behavior is
             // unchanged (no agentId → falls back to env AGENT_ID when
@@ -141,21 +154,25 @@ export function registerMcpEndpoints(
               ...(project !== undefined && { project }),
               ...(projectId !== undefined && { projectId }),
             } });
-            const text =
+            if (
               format === "narrative" &&
               result &&
               typeof result === "object" &&
               "text" in (result as Record<string, unknown>) &&
               typeof (result as { text?: unknown }).text === "string"
-                ? (result as { text: string }).text
-                : JSON.stringify(result, null, 2);
+            ) {
+              return {
+                status_code: 200,
+                body: {
+                  content: [
+                    { type: "text", text: (result as { text: string }).text },
+                  ],
+                },
+              };
+            }
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text },
-                ],
-              },
+              body: mcpTextBody(result, tz),
             };
           }
 
@@ -185,6 +202,7 @@ export function registerMcpEndpoints(
                 body: { error: "content is required for memory_save" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const type = (args.type as string) || "fact";
             const concepts =
               typeof args.concepts === "string"
@@ -217,9 +235,7 @@ export function registerMcpEndpoints(
             } });
             return {
               status_code: 200,
-              body: {
-                content: [{ type: "text", text: JSON.stringify(result) }],
-              },
+              body: mcpTextBody(result, tz),
             };
           }
 
@@ -230,6 +246,7 @@ export function registerMcpEndpoints(
                 body: { error: "files is required for memory_file_history" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const fileList = parseCsvList(args.files);
             if (!fileList.length) {
               return {
@@ -244,6 +261,7 @@ export function registerMcpEndpoints(
               function_id: "mem::file-context",
               payload,
             });
+            const converted = tz ? deepConvertTimestamps(result, tz) : result;
             return {
               status_code: 200,
               body: {
@@ -251,7 +269,7 @@ export function registerMcpEndpoints(
                   {
                     type: "text",
                     text:
-                      (result as { context: string }).context ||
+                      (converted as { context: string }).context ||
                       "No history found.",
                   },
                 ],
@@ -260,28 +278,22 @@ export function registerMcpEndpoints(
           }
 
           case "memory_patterns": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const result = await sdk.trigger({ function_id: "mem::patterns", payload: {
               project: args.project as string,
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(result, null, 2) },
-                ],
-              },
+              body: mcpTextBody(result, tz),
             };
           }
 
           case "memory_sessions": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const sessions = await kv.list(KV.sessions);
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify({ sessions }, null, 2) },
-                ],
-              },
+              body: mcpTextBody({ sessions }, tz),
             };
           }
 
@@ -292,6 +304,7 @@ export function registerMcpEndpoints(
                 body: { error: "query is required for memory_smart_search" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const expandIds = parseCsvList(args.expandIds).slice(0, 20);
             const limit = Math.max(1, Math.min(100, asNumber(args.limit, 10) ?? 10));
             const project = typeof args.project === "string" && args.project.trim().length > 0
@@ -316,11 +329,7 @@ export function registerMcpEndpoints(
             });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(result, null, 2) },
-                ],
-              },
+              body: mcpTextBody(result, tz),
             };
           }
 
@@ -334,6 +343,7 @@ export function registerMcpEndpoints(
                 body: { error: "queryText, queryImageRef, or queryImageBase64 required" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const topK = Math.max(1, Math.min(50, asNumber(args.topK, 10) ?? 10));
             const sessionId = typeof args.sessionId === "string" ? args.sessionId : undefined;
             const result = await sdk.trigger({
@@ -342,11 +352,7 @@ export function registerMcpEndpoints(
             });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(result, null, 2) },
-                ],
-              },
+              body: mcpTextBody(result, tz),
             };
           }
 
@@ -357,6 +363,7 @@ export function registerMcpEndpoints(
                 body: { error: "anchor is required for memory_timeline" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const result = await sdk.trigger({ function_id: "mem::timeline", payload: {
               anchor: args.anchor,
               project: (args.project as string) || undefined,
@@ -365,11 +372,7 @@ export function registerMcpEndpoints(
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(result, null, 2) },
-                ],
-              },
+              body: mcpTextBody(result, tz),
             };
           }
 
@@ -380,6 +383,7 @@ export function registerMcpEndpoints(
                 body: { error: "project is required for memory_profile" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const project = args.project.trim();
             let projectId: string | undefined;
             try {
@@ -393,23 +397,16 @@ export function registerMcpEndpoints(
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(result, null, 2) },
-                ],
-              },
+              body: mcpTextBody(result, tz),
             };
           }
 
           case "memory_export": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const result = await sdk.trigger({ function_id: "mem::export", payload: {} });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(result, null, 2) },
-                ],
-              },
+              body: mcpTextBody(result, tz),
             };
           }
 
@@ -420,6 +417,7 @@ export function registerMcpEndpoints(
                 body: { error: "memoryId is required for memory_relations" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const rawMaxHops = Number(args.maxHops);
             const rawMinConf = Number(args.minConfidence);
             const result = await sdk.trigger({ function_id: "mem::get-related", payload: {
@@ -431,15 +429,12 @@ export function registerMcpEndpoints(
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(result, null, 2) },
-                ],
-              },
+              body: mcpTextBody(result, tz),
             };
           }
 
           case "memory_claude_bridge_sync": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const direction = (args.direction as string) || "write";
             const funcId =
               direction === "read"
@@ -452,11 +447,7 @@ export function registerMcpEndpoints(
               });
               return {
                 status_code: 200,
-                body: {
-                  content: [
-                    { type: "text", text: JSON.stringify(result, null, 2) },
-                  ],
-                },
+                body: mcpTextBody(result, tz),
               };
             } catch {
               return {
@@ -474,6 +465,7 @@ export function registerMcpEndpoints(
           }
 
           case "memory_graph_query": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             try {
               const payload: {
                 startNodeId?: string;
@@ -495,11 +487,7 @@ export function registerMcpEndpoints(
               });
               return {
                 status_code: 200,
-                body: {
-                  content: [
-                    { type: "text", text: JSON.stringify(result, null, 2) },
-                  ],
-                },
+                body: mcpTextBody(result, tz),
               };
             } catch {
               return {
@@ -517,17 +505,14 @@ export function registerMcpEndpoints(
           }
 
           case "memory_consolidate": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             try {
               const result = await sdk.trigger({ function_id: "mem::consolidate-pipeline", payload: {
                 tier: args.tier as string,
               } });
               return {
                 status_code: 200,
-                body: {
-                  content: [
-                    { type: "text", text: JSON.stringify(result, null, 2) },
-                  ],
-                },
+                body: mcpTextBody(result, tz),
               };
             } catch {
               return {
@@ -554,6 +539,7 @@ export function registerMcpEndpoints(
                 body: { error: "itemId and itemType are required" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             try {
               const result = await sdk.trigger({ function_id: "mem::team-share", payload: {
                 itemId: args.itemId,
@@ -561,11 +547,7 @@ export function registerMcpEndpoints(
               } });
               return {
                 status_code: 200,
-                body: {
-                  content: [
-                    { type: "text", text: JSON.stringify(result, null, 2) },
-                  ],
-                },
+                body: mcpTextBody(result, tz),
               };
             } catch {
               return {
@@ -583,17 +565,14 @@ export function registerMcpEndpoints(
           }
 
           case "memory_team_feed": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             try {
               const result = await sdk.trigger({ function_id: "mem::team-feed", payload: {
                 limit: typeof args.limit === "number" ? args.limit : 20,
               } });
               return {
                 status_code: 200,
-                body: {
-                  content: [
-                    { type: "text", text: JSON.stringify(result, null, 2) },
-                  ],
-                },
+                body: mcpTextBody(result, tz),
               };
             } catch {
               return {
@@ -611,6 +590,7 @@ export function registerMcpEndpoints(
           }
 
           case "memory_audit": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             try {
               const result = await sdk.trigger({ function_id: "mem::audit-query", payload: {
                 operation: args.operation as string,
@@ -618,11 +598,7 @@ export function registerMcpEndpoints(
               } });
               return {
                 status_code: 200,
-                body: {
-                  content: [
-                    { type: "text", text: JSON.stringify(result, null, 2) },
-                  ],
-                },
+                body: mcpTextBody(result, tz),
               };
             } catch {
               return {
@@ -671,17 +647,14 @@ export function registerMcpEndpoints(
           }
 
           case "memory_snapshot_create": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             try {
               const result = await sdk.trigger({ function_id: "mem::snapshot-create", payload: {
                 message: args.message as string,
               } });
               return {
                 status_code: 200,
-                body: {
-                  content: [
-                    { type: "text", text: JSON.stringify(result, null, 2) },
-                  ],
-                },
+                body: mcpTextBody(result, tz),
               };
             } catch {
               return {
@@ -705,6 +678,7 @@ export function registerMcpEndpoints(
                 body: { error: "title is required" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const edges: Array<{ type: string; targetActionId: string }> = [];
             if (typeof args.requires === "string" && args.requires.trim()) {
               for (const id of args.requires.split(",").map((s: string) => s.trim()).filter(Boolean)) {
@@ -725,11 +699,7 @@ export function registerMcpEndpoints(
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(actionResult, null, 2) },
-                ],
-              },
+              body: mcpTextBody(actionResult, tz),
             };
           }
 
@@ -757,6 +727,7 @@ export function registerMcpEndpoints(
           }
 
           case "memory_frontier": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const frontierResult = await sdk.trigger({ function_id: "mem::frontier", payload: {
               project: args.project,
               agentId: args.agentId,
@@ -764,26 +735,19 @@ export function registerMcpEndpoints(
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(frontierResult, null, 2) },
-                ],
-              },
+              body: mcpTextBody(frontierResult, tz),
             };
           }
 
           case "memory_next": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const nextResult = await sdk.trigger({ function_id: "mem::next", payload: {
               project: args.project,
               agentId: args.agentId,
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(nextResult, null, 2) },
-                ],
-              },
+              body: mcpTextBody(nextResult, tz),
             };
           }
 
@@ -798,6 +762,7 @@ export function registerMcpEndpoints(
                 body: { error: "actionId, agentId, and operation are required" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const op = args.operation as string;
             let leaseResult;
             if (op === "acquire") {
@@ -826,11 +791,7 @@ export function registerMcpEndpoints(
             }
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(leaseResult, null, 2) },
-                ],
-              },
+              body: mcpTextBody(leaseResult, tz),
             };
           }
 
@@ -841,6 +802,7 @@ export function registerMcpEndpoints(
                 body: { error: "routineId is required" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const runResult = await sdk.trigger({ function_id: "mem::routine-run", payload: {
               routineId: args.routineId,
               project: args.project,
@@ -848,11 +810,7 @@ export function registerMcpEndpoints(
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(runResult, null, 2) },
-                ],
-              },
+              body: mcpTextBody(runResult, tz),
             };
           }
 
@@ -866,6 +824,7 @@ export function registerMcpEndpoints(
                 body: { error: "from and content are required" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const sigResult = await sdk.trigger({ function_id: "mem::signal-send", payload: {
               from: args.from,
               to: args.to,
@@ -875,11 +834,7 @@ export function registerMcpEndpoints(
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(sigResult, null, 2) },
-                ],
-              },
+              body: mcpTextBody(sigResult, tz),
             };
           }
 
@@ -890,6 +845,7 @@ export function registerMcpEndpoints(
                 body: { error: "agentId is required" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const readResult = await sdk.trigger({ function_id: "mem::signal-read", payload: {
               agentId: args.agentId,
               unreadOnly: args.unreadOnly === true || args.unreadOnly === "true",
@@ -898,11 +854,7 @@ export function registerMcpEndpoints(
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(readResult, null, 2) },
-                ],
-              },
+              body: mcpTextBody(readResult, tz),
             };
           }
 
@@ -914,6 +866,7 @@ export function registerMcpEndpoints(
                 body: { error: "operation is required" },
               };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             let cpResult;
             if (cpOp === "create") {
               const linkedIds = typeof args.linkedActionIds === "string" && args.linkedActionIds.trim()
@@ -949,30 +902,24 @@ export function registerMcpEndpoints(
             }
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(cpResult, null, 2) },
-                ],
-              },
+              body: mcpTextBody(cpResult, tz),
             };
           }
 
           case "memory_mesh_sync": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const meshResult = await sdk.trigger({ function_id: "mem::mesh-sync", payload: {
               peerId: args.peerId,
               direction: args.direction,
             } });
             return {
               status_code: 200,
-              body: {
-                content: [
-                  { type: "text", text: JSON.stringify(meshResult, null, 2) },
-                ],
-              },
+              body: mcpTextBody(meshResult, tz),
             };
           }
 
           case "memory_sentinel_create": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             let snlConfig: Record<string, unknown> = {};
             if (typeof args.config === "object" && args.config !== null) {
               snlConfig = args.config as Record<string, unknown>;
@@ -998,10 +945,11 @@ export function registerMcpEndpoints(
               function_id: "mem::sentinel-create",
               payload,
             });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(snlResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(snlResult, tz) };
           }
 
           case "memory_sentinel_trigger": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             let snlTrigPayload: unknown;
             if (args.result !== undefined && args.result !== null) {
               if (typeof args.result === "string") {
@@ -1021,10 +969,11 @@ export function registerMcpEndpoints(
               sentinelId,
               result: snlTrigPayload,
             } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(snlTrigResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(snlTrigResult, tz) };
           }
 
           case "memory_sketch_create": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const title = asNonEmptyString(args.title);
             if (!title) {
               return {
@@ -1042,10 +991,11 @@ export function registerMcpEndpoints(
               function_id: "mem::sketch-create",
               payload: sketchPayload,
             });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(skResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(skResult, tz) };
           }
 
           case "memory_sketch_promote": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const sketchId = asNonEmptyString(args.sketchId);
             if (!sketchId) {
               return {
@@ -1057,20 +1007,21 @@ export function registerMcpEndpoints(
               sketchId,
               project: args.project,
             } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(skpResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(skpResult, tz) };
           }
 
           case "memory_crystallize": {
             if (typeof args.actionIds !== "string" || !args.actionIds.trim()) {
               return { status_code: 400, body: { error: "actionIds is required" } };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const crysIds = args.actionIds.split(",").map((s: string) => s.trim()).filter(Boolean);
             const crysResult = await sdk.trigger({ function_id: "mem::crystallize", payload: {
               actionIds: crysIds,
               project: args.project,
               sessionId: args.sessionId,
             } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(crysResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(crysResult, tz) };
           }
 
           case "memory_diagnose": {
@@ -1109,6 +1060,7 @@ export function registerMcpEndpoints(
             if (args.matchAny !== undefined && typeof args.matchAny !== "string") {
               return { status_code: 400, body: { error: "matchAny must be a string" } };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const fqAll = typeof args.matchAll === "string" && args.matchAll.trim()
               ? args.matchAll.split(",").map((s: string) => s.trim()).filter(Boolean)
               : undefined;
@@ -1120,21 +1072,23 @@ export function registerMcpEndpoints(
               matchAny: fqAny,
               targetType: args.targetType,
             } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(fqResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(fqResult, tz) };
           }
 
           case "memory_verify": {
             if (!args.id || typeof args.id !== "string") {
               return { status_code: 400, body: { error: "id is required" } };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const verifyResult = await sdk.trigger({ function_id: "mem::verify", payload: { id: args.id } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(verifyResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(verifyResult, tz) };
           }
 
           case "memory_lesson_save": {
             if (typeof args.content !== "string" || !args.content.trim()) {
               return { status_code: 400, body: { error: "content is required" } };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const lessonTags = typeof args.tags === "string" && args.tags.trim()
               ? args.tags.split(",").map((t: string) => t.trim()).filter(Boolean)
               : [];
@@ -1146,40 +1100,44 @@ export function registerMcpEndpoints(
               tags: lessonTags,
               source: "manual",
             } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(lessonSaveResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(lessonSaveResult, tz) };
           }
 
           case "memory_lesson_recall": {
             if (typeof args.query !== "string" || !args.query.trim()) {
               return { status_code: 400, body: { error: "query is required" } };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const lessonRecallResult = await sdk.trigger({ function_id: "mem::lesson-recall", payload: {
               query: args.query,
               project: args.project,
               minConfidence: args.minConfidence,
               limit: args.limit,
             } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(lessonRecallResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(lessonRecallResult, tz) };
           }
 
           case "memory_reflect": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const reflectResult = await sdk.trigger({ function_id: "mem::reflect", payload: {
               project: args.project,
               maxClusters: args.maxClusters,
             } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(reflectResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(reflectResult, tz) };
           }
 
           case "memory_insight_list": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const insightListResult = await sdk.trigger({ function_id: "mem::insight-list", payload: {
               project: args.project,
               minConfidence: args.minConfidence,
               limit: args.limit,
             } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(insightListResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(insightListResult, tz) };
           }
 
           case "memory_obsidian_export": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const exportTypes = typeof args.types === "string" && args.types.trim()
               ? args.types.split(",").map((t: string) => t.trim()).filter(Boolean)
               : undefined;
@@ -1187,10 +1145,11 @@ export function registerMcpEndpoints(
               vaultDir: args.vaultDir,
               types: exportTypes,
             } });
-            return { status_code: 200, body: { content: [{ type: "text", text: JSON.stringify(obsidianResult, null, 2) }] } };
+            return { status_code: 200, body: mcpTextBody(obsidianResult, tz) };
           }
 
           case "memory_slot_list": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const project = typeof args.project === "string" && args.project ? args.project : undefined;
             let projectId: string | undefined;
             if (project) {
@@ -1202,13 +1161,14 @@ export function registerMcpEndpoints(
             const result = await sdk.trigger({ function_id: "mem::slot-list", payload: { project, ...(projectId !== undefined && { projectId }) } });
             return {
               status_code: 200,
-              body: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] },
+              body: mcpTextBody(result, tz),
             };
           }
 
           case "memory_slot_get": {
             const label = asNonEmptyString(args.label);
             if (!label) return { status_code: 400, body: { error: "label required" } };
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const project = typeof args.project === "string" && args.project ? args.project : undefined;
             let projectId: string | undefined;
             if (project) {
@@ -1220,13 +1180,14 @@ export function registerMcpEndpoints(
             const result = await sdk.trigger({ function_id: "mem::slot-get", payload: { label, project, ...(projectId !== undefined && { projectId }) } });
             return {
               status_code: 200,
-              body: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] },
+              body: mcpTextBody(result, tz),
             };
           }
 
           case "memory_slot_create": {
             const label = asNonEmptyString(args.label);
             if (!label) return { status_code: 400, body: { error: "label required" } };
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const payload: Record<string, unknown> = { label };
             if (typeof args.content === "string") payload.content = args.content;
             if (typeof args.description === "string") payload.description = args.description;
@@ -1246,7 +1207,7 @@ export function registerMcpEndpoints(
             const result = await sdk.trigger({ function_id: "mem::slot-create", payload });
             return {
               status_code: 200,
-              body: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] },
+              body: mcpTextBody(result, tz),
             };
           }
 
@@ -1254,6 +1215,7 @@ export function registerMcpEndpoints(
             const label = asNonEmptyString(args.label);
             const text = typeof args.text === "string" ? args.text : null;
             if (!label || !text) return { status_code: 400, body: { error: "label and text required" } };
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const project = typeof args.project === "string" && args.project ? args.project : undefined;
             let projectId: string | undefined;
             if (project) {
@@ -1265,7 +1227,7 @@ export function registerMcpEndpoints(
             const result = await sdk.trigger({ function_id: "mem::slot-append", payload: { label, text, project, ...(projectId !== undefined && { projectId }) } });
             return {
               status_code: 200,
-              body: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] },
+              body: mcpTextBody(result, tz),
             };
           }
 
@@ -1274,6 +1236,7 @@ export function registerMcpEndpoints(
             if (!label || typeof args.content !== "string") {
               return { status_code: 400, body: { error: "label and content (string) required" } };
             }
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const project = typeof args.project === "string" && args.project ? args.project : undefined;
             let projectId: string | undefined;
             if (project) {
@@ -1285,7 +1248,7 @@ export function registerMcpEndpoints(
             const result = await sdk.trigger({ function_id: "mem::slot-replace", payload: { label, content: args.content, project, ...(projectId !== undefined && { projectId }) } });
             return {
               status_code: 200,
-              body: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] },
+              body: mcpTextBody(result, tz),
             };
           }
 
@@ -1310,11 +1273,12 @@ export function registerMcpEndpoints(
           case "memory_commit_lookup": {
             const sha = asNonEmptyString(args.sha);
             if (!sha) return { status_code: 400, body: { error: "sha required" } };
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const link = await kv.get(KV.commits, sha);
             if (!link) {
               return {
                 status_code: 200,
-                body: { content: [{ type: "text", text: JSON.stringify({ commit: null, sessions: [] }, null, 2) }] },
+                body: mcpTextBody({ commit: null, sessions: [] }, tz),
               };
             }
             const linkRecord = link as { sessionIds?: string[] };
@@ -1324,11 +1288,12 @@ export function registerMcpEndpoints(
             const sessions = fetched.filter((s) => s !== null);
             return {
               status_code: 200,
-              body: { content: [{ type: "text", text: JSON.stringify({ commit: link, sessions }, null, 2) }] },
+              body: mcpTextBody({ commit: link, sessions }, tz),
             };
           }
 
           case "memory_commits": {
+            const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
             const branch = typeof args.branch === "string" ? args.branch : undefined;
             const repo = typeof args.repo === "string" ? args.repo : undefined;
             const limit = Math.max(1, Math.min(500, asNumber(args.limit, 100) ?? 100));
@@ -1340,7 +1305,7 @@ export function registerMcpEndpoints(
               .slice(0, limit);
             return {
               status_code: 200,
-              body: { content: [{ type: "text", text: JSON.stringify({ commits: filtered }, null, 2) }] },
+              body: mcpTextBody({ commits: filtered }, tz),
             };
           }
 
@@ -1429,11 +1394,18 @@ export function registerMcpEndpoints(
         return { status_code: 400, body: { error: "uri is required" } };
       }
 
+      const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
       try {
         if (uri === "agentmemory://status") {
           const sessions = await kv.list<Session>(KV.sessions);
           const memories = await kv.list<Memory>(KV.memories);
           const healthData = await kv.list(KV.health).catch(() => []);
+          const statusData = {
+            sessionCount: sessions.length,
+            memoryCount: memories.length,
+            healthStatus:
+              healthData.length > 0 ? "available" : "no-data",
+          };
           return {
             status_code: 200,
             body: {
@@ -1441,12 +1413,7 @@ export function registerMcpEndpoints(
                 {
                   uri,
                   mimeType: "application/json",
-                  text: JSON.stringify({
-                    sessionCount: sessions.length,
-                    memoryCount: memories.length,
-                    healthStatus:
-                      healthData.length > 0 ? "available" : "no-data",
-                  }),
+                  text: JSON.stringify(tz ? deepConvertTimestamps(statusData, tz) : statusData),
                 },
               ],
             },
@@ -1476,7 +1443,7 @@ export function registerMcpEndpoints(
                 {
                   uri,
                   mimeType: "application/json",
-                  text: JSON.stringify(profile),
+                  text: JSON.stringify(tz ? deepConvertTimestamps(profile, tz) : profile),
                 },
               ],
             },
@@ -1512,7 +1479,7 @@ export function registerMcpEndpoints(
                 {
                   uri,
                   mimeType: "application/json",
-                  text: JSON.stringify(filtered),
+                  text: JSON.stringify(tz ? deepConvertTimestamps(filtered, tz) : filtered),
                 },
               ],
             },
@@ -1718,6 +1685,7 @@ export function registerMcpEndpoints(
       }
 
       const promptArgs = req.body?.arguments || {};
+      const tz = resolveTimezone(extractTimezoneHeader(req), getConfiguredTimezone());
 
       try {
         switch (promptName) {
@@ -1767,6 +1735,8 @@ export function registerMcpEndpoints(
                         m.agentId === activeAgentId,
                     )
                     .slice(0, 5);
+            const convertedSearch = tz ? deepConvertTimestamps(searchResult, tz) : searchResult;
+            const convertedRelevant = tz ? deepConvertTimestamps(relevant, tz) : relevant;
             return {
               status_code: 200,
               body: {
@@ -1775,7 +1745,7 @@ export function registerMcpEndpoints(
                     role: "user",
                     content: {
                       type: "text",
-                      text: `Here is relevant context from past sessions for the task: "${taskDesc}"\n\n## Past Observations\n${JSON.stringify(searchResult, null, 2)}\n\n## Relevant Memories\n${JSON.stringify(relevant, null, 2)}`,
+                      text: `Here is relevant context from past sessions for the task: "${taskDesc}"\n\n## Past Observations\n${JSON.stringify(convertedSearch, null, 2)}\n\n## Relevant Memories\n${JSON.stringify(convertedRelevant, null, 2)}`,
                     },
                   },
                 ],
@@ -1796,6 +1766,8 @@ export function registerMcpEndpoints(
             const session = await kv.get<Session>(KV.sessions, sessionId);
             const summaries = await kv.list<SessionSummary>(KV.summaries);
             const summary = summaries.find((s) => s.sessionId === sessionId);
+            const convertedSession = tz ? deepConvertTimestamps(session, tz) : session;
+            const convertedSummary = tz ? deepConvertTimestamps(summary || "No summary available", tz) : (summary || "No summary available");
             return {
               status_code: 200,
               body: {
@@ -1804,7 +1776,7 @@ export function registerMcpEndpoints(
                     role: "user",
                     content: {
                       type: "text",
-                      text: `## Session Handoff\n\n### Session\n${JSON.stringify(session, null, 2)}\n\n### Summary\n${JSON.stringify(summary || "No summary available", null, 2)}`,
+                      text: `## Session Handoff\n\n### Session\n${JSON.stringify(convertedSession, null, 2)}\n\n### Summary\n${JSON.stringify(convertedSummary, null, 2)}`,
                     },
                   },
                 ],
@@ -1825,6 +1797,7 @@ export function registerMcpEndpoints(
             const result = await sdk.trigger({ function_id: "mem::patterns", payload: {
               project: promptArgs.project || undefined,
             } });
+            const converted = tz ? deepConvertTimestamps(result, tz) : result;
             return {
               status_code: 200,
               body: {
@@ -1833,7 +1806,7 @@ export function registerMcpEndpoints(
                     role: "user",
                     content: {
                       type: "text",
-                      text: `## Pattern Analysis\n\n${JSON.stringify(result, null, 2)}`,
+                      text: `## Pattern Analysis\n\n${JSON.stringify(converted, null, 2)}`,
                     },
                   },
                 ],

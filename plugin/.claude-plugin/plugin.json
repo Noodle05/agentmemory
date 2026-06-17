@@ -11,5 +11,13 @@
   "repository": "https://github.com/rohitg00/agentmemory",
   "skills": ["./skills/"],
   "hooks": "./hooks/hooks.json",
-  "mcpServers": "./.mcp.json"
+  "mcpServers": "./.mcp.json",
+  "userConfig": {
+    "timezone": {
+      "type": "string",
+      "label": "Display Timezone",
+      "default": "",
+      "description": "IANA timezone for displaying timestamps (e.g., 'Asia/Shanghai', 'America/New_York', 'Europe/London'). Leave empty to see UTC timestamps."
+    }
+  }
 }

@@ -8,6 +8,7 @@ function isSdkChildContext(payload) {
 const INJECT_CONTEXT = process.env["AGENTMEMORY_INJECT_CONTEXT"] === "true";
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
 function authHeaders() {
 	const h = { "Content-Type": "application/json" };
 	if (SECRET) h["Authorization"] = `Bearer ${SECRET}`;
@@ -59,7 +60,7 @@ async function main() {
 	const sessionId = typeof rawSessionId === "string" && rawSessionId.length > 0 ? rawSessionId : "unknown";
 	const project = typeof data.project === "string" && data.project.trim().length > 0 ? data.project.trim() : void 0;
 	try {
-		const res = await fetch(`${REST_URL}/agentmemory/enrich`, {
+		const res = await fetch(`${REST_URL}/agentmemory/enrich` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : ""), {
 			method: "POST",
 			headers: authHeaders(),
 			body: JSON.stringify({
