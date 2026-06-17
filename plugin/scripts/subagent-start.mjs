@@ -53,6 +53,7 @@ function isSdkChildContext(payload) {
 const INJECT_CONTEXT = process.env["AGENTMEMORY_INJECT_CONTEXT"] === "true";
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
 const INJECT_TIMEOUT_MS = 1500;
 const OBSERVE_TIMEOUT_MS = 800;
 function authHeaders() {
@@ -76,7 +77,7 @@ async function main() {
 	const gitRemotes = collectGitRemotes(data.cwd);
 	const agentId = data.agent_id || data.agentName;
 	const agentType = data.agent_type || data.agentDisplayName || data.agentName;
-	fetch(`${REST_URL}/agentmemory/observe`, {
+	fetch(`${REST_URL}/agentmemory/observe` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : ""), {
 		method: "POST",
 		headers: authHeaders(),
 		body: JSON.stringify({
@@ -94,7 +95,7 @@ async function main() {
 		signal: AbortSignal.timeout(OBSERVE_TIMEOUT_MS)
 	}).catch(() => {});
 	if (INJECT_CONTEXT) try {
-		const res = await fetch(`${REST_URL}/agentmemory/context`, {
+		const res = await fetch(`${REST_URL}/agentmemory/context` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : ""), {
 			method: "POST",
 			headers: authHeaders(),
 			body: JSON.stringify({

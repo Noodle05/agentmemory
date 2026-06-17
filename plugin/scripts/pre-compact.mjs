@@ -29,6 +29,7 @@ function isSdkChildContext(payload) {
 }
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
 function authHeaders() {
 	const h = { "Content-Type": "application/json" };
 	if (SECRET) h["Authorization"] = `Bearer ${SECRET}`;
@@ -55,7 +56,7 @@ async function main() {
 		});
 	} catch {}
 	try {
-		const res = await fetch(`${REST_URL}/agentmemory/context`, {
+		const res = await fetch(`${REST_URL}/agentmemory/context` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : ""), {
 			method: "POST",
 			headers: authHeaders(),
 			body: JSON.stringify({

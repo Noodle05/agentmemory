@@ -23,7 +23,10 @@ import {
   detectLlmProviderKind,
   getAgentId,
   isAgentScopeIsolated,
+  getConfiguredTimezone,
 } from "../config.js";
+
+import { resolveTimezone, deepConvertTimestamps } from "../utils/timezone.js";
 
 type Response = {
   status_code: number;
@@ -134,6 +137,17 @@ function parseOptionalPositiveInt(value: unknown): number | undefined | null {
   if (parsed === undefined || parsed === null) return parsed;
   if (!Number.isInteger(parsed) || parsed < 1) return null;
   return parsed;
+}
+
+function extractTimezoneFromQuery(req: ApiRequest): string | undefined {
+  const raw = req.query_params?.["timezone"] ?? req.query_params?.["tz"];
+  if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
+  return undefined;
+}
+
+function apiOk(body: unknown, timezone: string | null): { status_code: number; body: unknown } {
+  const formatted = timezone ? deepConvertTimestamps(body, timezone) : body;
+  return { status_code: 200, body: formatted };
 }
 
 export function registerApiTriggers(
@@ -310,7 +324,9 @@ export function registerApiTriggers(
         data: body.data,
       };
       const result = await sdk.trigger({ function_id: "mem::observe", payload });
-      return { status_code: 201, body: result };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      const formatted = tz ? deepConvertTimestamps(result, tz) : result;
+      return { status_code: 201, body: formatted };
     },
   );
   sdk.registerTrigger({
@@ -436,7 +452,8 @@ export function registerApiTriggers(
         agentId: bodyAgentId ?? queryAgentId,
       };
       const result = await sdk.trigger({ function_id: "mem::search", payload: payload });
-      return { status_code: 200, body: result };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk(result, tz);
     },
   );
   sdk.registerTrigger({
@@ -486,7 +503,8 @@ export function registerApiTriggers(
         function_id: "mem::replay::load",
         payload: { sessionId },
       });
-      return { status_code: 200, body: result };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk(result, tz);
     },
   );
   sdk.registerTrigger({
@@ -503,7 +521,8 @@ export function registerApiTriggers(
       sessions.sort((a, b) =>
         (b.startedAt || "").localeCompare(a.startedAt || ""),
       );
-      return { status_code: 200, body: { success: true, sessions } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ success: true, sessions }, tz);
     },
   );
   sdk.registerTrigger({
@@ -606,10 +625,8 @@ export function registerApiTriggers(
         { sessionId: string; project: string },
         { context: string }
       >({ function_id: "mem::context", payload: { sessionId, project } });
-      return {
-        status_code: 200,
-        body: { session, context: contextResult.context },
-      };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ session, context: contextResult.context }, tz);
     },
   );
   sdk.registerTrigger({
@@ -737,7 +754,8 @@ export function registerApiTriggers(
         });
       }
 
-      return { status_code: 200, body: { commit: link } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ commit: link }, tz);
     },
   );
   sdk.registerTrigger({
@@ -772,7 +790,8 @@ export function registerApiTriggers(
         (link.sessionIds ?? []).map((sid) => kv.get<Session>(KV.sessions, sid)),
       );
       const sessions = fetched.filter((s): s is Session => s !== null);
-      return { status_code: 200, body: { commit: link, sessions } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ commit: link, sessions }, tz);
     },
   );
   sdk.registerTrigger({
@@ -799,7 +818,8 @@ export function registerApiTriggers(
         .filter((c) => !repo || c.repo === repo)
         .sort((a, b) => ((a.linkedAt ?? "") < (b.linkedAt ?? "") ? 1 : -1))
         .slice(0, limit);
-      return { status_code: 200, body: { commits: filtered } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ commits: filtered }, tz);
     },
   );
   sdk.registerTrigger({
@@ -845,7 +865,8 @@ export function registerApiTriggers(
       const withSummary = filtered.map((s, i) =>
         summaries[i] ? { ...s, summary: summaries[i] } : s,
       );
-      return { status_code: 200, body: { sessions: withSummary } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ sessions: withSummary }, tz);
     },
   );
   sdk.registerTrigger({
@@ -878,7 +899,8 @@ export function registerApiTriggers(
       const filtered = filterAgentId
         ? observations.filter((o) => o.agentId === filterAgentId)
         : observations;
-      return { status_code: 200, body: { observations: filtered } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ observations: filtered }, tz);
     },
   );
   sdk.registerTrigger({
@@ -1006,7 +1028,9 @@ export function registerApiTriggers(
           ...(req.body.project !== undefined && { project: req.body.project }),
         },
       });
-      return { status_code: 201, body: result };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      const body = tz ? deepConvertTimestamps(result, tz) : result;
+      return { status_code: 201, body };
     },
   );
   sdk.registerTrigger({
@@ -1032,7 +1056,8 @@ export function registerApiTriggers(
         };
       }
       const result = await sdk.trigger({ function_id: "mem::forget", payload: req.body });
-      return { status_code: 200, body: result };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk(result, tz);
     },
   );
   sdk.registerTrigger({
@@ -1179,7 +1204,8 @@ export function registerApiTriggers(
         source: req.body?.source ?? sourceFromHeader,
       };
       const result = await sdk.trigger({ function_id: "mem::smart-search", payload });
-      return { status_code: 200, body: result };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk(result, tz);
     },
   );
   sdk.registerTrigger({
@@ -1235,7 +1261,8 @@ export function registerApiTriggers(
         return { status_code: 400, body: { error: "anchor is required" } };
       }
       const result = await sdk.trigger({ function_id: "mem::timeline", payload: req.body });
-      return { status_code: 200, body: result };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk(result, tz);
     },
   );
   sdk.registerTrigger({
@@ -1256,7 +1283,8 @@ export function registerApiTriggers(
         };
       }
       const result = await sdk.trigger({ function_id: "mem::profile", payload: { project } });
-      return { status_code: 200, body: result };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk(result, tz);
     },
   );
   sdk.registerTrigger({
@@ -1289,7 +1317,8 @@ export function registerApiTriggers(
         function_id: "mem::export",
         payload,
       });
-      return { status_code: 200, body: result };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk(result, tz);
     },
   );
   sdk.registerTrigger({
@@ -1454,7 +1483,8 @@ export function registerApiTriggers(
       };
       try {
         const result = await sdk.trigger({ function_id: "mem::graph-query", payload });
-        return { status_code: 200, body: result };
+        const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+        return apiOk(result, tz);
       } catch {
         return graphDisabledResponse();
       }
@@ -1634,7 +1664,8 @@ export function registerApiTriggers(
       try {
         const result = await sdk.trigger({ function_id: "mem::consolidate-pipeline", payload: req.body || {},
          });
-        return { status_code: 200, body: result };
+        const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+        return apiOk(result, tz);
       } catch {
         return consolidationDisabledResponse();
       }
@@ -1663,7 +1694,9 @@ export function registerApiTriggers(
       }
       try {
         const result = await sdk.trigger({ function_id: "mem::team-share", payload: req.body });
-        return { status_code: 201, body: result };
+        const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+        const body = tz ? deepConvertTimestamps(result, tz) : result;
+        return { status_code: 201, body };
       } catch {
         return { status_code: 404, body: { error: "Team memory not enabled" } };
       }
@@ -1683,7 +1716,8 @@ export function registerApiTriggers(
         const parsedLimit = parseOptionalInt(req.query_params?.["limit"]);
         const limit = parsedLimit ?? 20;
         const result = await sdk.trigger({ function_id: "mem::team-feed", payload: { limit } });
-        return { status_code: 200, body: result };
+        const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+        return apiOk(result, tz);
       } catch {
         return { status_code: 404, body: { error: "Team memory not enabled" } };
       }
@@ -1722,7 +1756,8 @@ export function registerApiTriggers(
         operation: req.query_params?.["operation"],
         limit: parsedLimit ?? 50,
       } });
-      return { status_code: 200, body: { entries, success: true } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ entries, success: true }, tz);
     },
   );
   sdk.registerTrigger({
@@ -1787,7 +1822,8 @@ export function registerApiTriggers(
       if (authErr) return authErr;
       try {
         const result = await sdk.trigger({ function_id: "mem::snapshot-list", payload: {} });
-        return { status_code: 200, body: result };
+        const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+        return apiOk(result, tz);
       } catch {
         return { status_code: 404, body: { error: "Snapshots not enabled" } };
       }
@@ -1806,7 +1842,9 @@ export function registerApiTriggers(
       try {
         const result = await sdk.trigger({ function_id: "mem::snapshot-create", payload: req.body || {},
          });
-        return { status_code: 201, body: result };
+        const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+        const body = tz ? deepConvertTimestamps(result, tz) : result;
+        return { status_code: 201, body };
       } catch {
         return { status_code: 404, body: { error: "Snapshots not enabled" } };
       }
@@ -1906,15 +1944,13 @@ export function registerApiTriggers(
       const sliced =
         limit !== undefined ? filtered.slice(offset, offset + limit) : filtered;
 
-      return {
-        status_code: 200,
-        body: {
-          memories: sliced,
-          total: filtered.length,
-          offset,
-          limit: limit ?? null,
-        },
-      };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({
+        memories: sliced,
+        total: filtered.length,
+        offset,
+        limit: limit ?? null,
+      }, tz);
     },
   );
   sdk.registerTrigger({
@@ -1935,7 +1971,8 @@ export function registerApiTriggers(
       if (!memory) {
         return { status_code: 404, body: { error: `memory not found: ${id}` } };
       }
-      return { status_code: 200, body: { memory } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ memory }, tz);
     },
   );
   sdk.registerTrigger({
@@ -1949,7 +1986,8 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       const semantic = await kv.list<import("../types.js").SemanticMemory>(KV.semantic);
-      return { status_code: 200, body: { semantic } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ semantic }, tz);
     },
   );
   sdk.registerTrigger({
@@ -1963,7 +2001,8 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       const procedural = await kv.list<import("../types.js").ProceduralMemory>(KV.procedural);
-      return { status_code: 200, body: { procedural } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ procedural }, tz);
     },
   );
   sdk.registerTrigger({
@@ -1977,7 +2016,8 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       const relations = await kv.list<import("../types.js").MemoryRelation>(KV.relations);
-      return { status_code: 200, body: { relations } };
+      const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+      return apiOk({ relations }, tz);
     },
   );
   sdk.registerTrigger({
@@ -2059,7 +2099,8 @@ export function registerApiTriggers(
     if (!isSlotsEnabled()) return slotsDisabledResponse();
     const project = asNonEmptyString(req.query_params?.["project"]) ?? undefined;
     const result = await sdk.trigger({ function_id: "mem::slot-list", payload: { project } });
-    return { status_code: 200, body: result };
+    const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+    return apiOk(result, tz);
   });
   sdk.registerTrigger({
     type: "http",
@@ -2079,7 +2120,8 @@ export function registerApiTriggers(
     if (resp?.success === false) {
       return { status_code: resp.error?.includes("not found") ? 404 : 400, body: resp };
     }
-    return { status_code: 200, body: result };
+    const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+    return apiOk(result, tz);
   });
   sdk.registerTrigger({
     type: "http",
@@ -2130,7 +2172,9 @@ export function registerApiTriggers(
     if (resp?.success === false) {
       return { status_code: resp.error?.includes("exists") ? 409 : 400, body: resp };
     }
-    return { status_code: 201, body: result };
+    const tz = resolveTimezone(extractTimezoneFromQuery(req), getConfiguredTimezone());
+    const formatted = tz ? deepConvertTimestamps(result, tz) : result;
+    return { status_code: 201, body: formatted };
   });
   sdk.registerTrigger({
     type: "http",

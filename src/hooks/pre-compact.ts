@@ -9,6 +9,7 @@ function isSdkChildContext(payload: unknown): boolean {
 
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
 
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -48,7 +49,7 @@ async function main() {
   }
 
   try {
-    const res = await fetch(`${REST_URL}/agentmemory/context`, {
+    const res = await fetch(`${REST_URL}/agentmemory/context` + (TIMEZONE ? `?timezone=${encodeURIComponent(TIMEZONE)}` : ""), {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({ sessionId, project, budget: 1500 }),

@@ -4,7 +4,8 @@
       "type": "http",
       "url": "${AGENTMEMORY_MCP_URL:-http://localhost:3114}",
       "headers": {
-        "Authorization": "Bearer ${AGENTMEMORY_SECRET:-}"
+        "Authorization": "Bearer ${AGENTMEMORY_SECRET:-}",
+        "X-Timezone": "${user_config.timezone}"
       }
     }
   }

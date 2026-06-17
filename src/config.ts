@@ -406,6 +406,12 @@ export function getConsolidationDecayDays(): number {
   return safeParseInt(getMergedEnv()["CONSOLIDATION_DECAY_DAYS"], 30);
 }
 
+export function getConfiguredTimezone(): string | undefined {
+  const raw = getMergedEnv()["AGENTMEMORY_TIMEZONE"];
+  if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
+  return undefined;
+}
+
 export function isStandaloneMcp(): boolean {
   return getMergedEnv()["STANDALONE_MCP"] === "true";
 }
