@@ -15,8 +15,7 @@
   "userConfig": {
     "timezone": {
       "type": "string",
-      "label": "Display Timezone",
-      "default": "",
+      "title": "Agent memory TimeZone",
       "description": "IANA timezone for displaying timestamps (e.g., 'Asia/Shanghai', 'America/New_York', 'Europe/London'). Leave empty to see UTC timestamps."
     }
   }
