@@ -53,7 +53,7 @@ function isSdkChildContext(payload) {
 const INJECT_CONTEXT = process.env["AGENTMEMORY_INJECT_CONTEXT"] === "true";
 const REST_URL = process.env["AGENTMEMORY_URL"] || "http://localhost:3111";
 const SECRET = process.env["AGENTMEMORY_SECRET"] || "";
-const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_timezone"] || "";
+const TIMEZONE = process.env["CLAUDE_PLUGIN_OPTION_TIMEZONE"] || "";
 const INJECT_TIMEOUT_MS = 1500;
 const OBSERVE_TIMEOUT_MS = 800;
 function authHeaders() {

@@ -271,8 +271,9 @@ export async function startMcpStreamServer(
           }
           const toolName = params.name as string;
           const args = (params.arguments as Record<string, unknown>) || {};
+          const timezone = (req.headers["x-timezone"] || req.headers["X-Timezone"]) as string | undefined;
           try {
-            const result = await handleToolCall(toolName, args, sdk, kv);
+            const result = await handleToolCall(toolName, args, sdk, kv, { timezone });
             sendJson(res, 200, {
               jsonrpc: "2.0",
               id: msg.id ?? null,
