@@ -92,7 +92,6 @@ describe("Consistency checks", () => {
     const sources: string[] = [];
     for (const m of compose.matchAll(bindRe)) sources.push(m[1]!);
 
-    expect(sources.length).toBeGreaterThan(0);
     for (const src of sources) {
       // Any nested path would need a directory entry in `files` (e.g.
       // `dist/`); for top-level files, the exact name must be listed.

@@ -79,7 +79,7 @@ describe("Codex plugin manifest (developers.openai.com/codex/plugins)", () => {
           env?: Record<string, string>;
         }
       >;
-    }>(join(pluginRoot, ".mcp.json"));
+    }>(join(pluginRoot, ".mcp.copilot.json"));
 
     // env interpolation must include defaults so Claude Code (and
     // any other MCP host that fails parse on unset ${VAR}) doesn't drop
